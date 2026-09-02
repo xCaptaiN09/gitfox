@@ -1,0 +1,8 @@
+# 🦊 gitfox review rules
+# gitfox reads this file on every run and enforces it.
+
+## Our rules
+- All user input must be validated before parsing.
+- Never build SQL queries by string concatenation.
+- No `any` types in TypeScript.
+- Every public function needs a short doc comment.

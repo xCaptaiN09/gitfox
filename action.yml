@@ -1,0 +1,100 @@
+name: "gitfox"
+description: >-
+  Private AI code review & issue triage powered by a local Ollama model.
+  No API keys, no cloud LLM — your code never leaves the runner.
+author: "xCaptaiN09"
+
+branding:
+  icon: "eye"
+  color: "orange"
+
+inputs:
+  github-token:
+    description: "GitHub token used to read PRs/issues and post comments"
+    required: false
+    default: ${{ github.token }}
+  model:
+    description: "Ollama model to use for review/triage"
+    required: false
+    default: "qwen2.5-coder:7b"
+  rules-path:
+    description: "Path (in the target repo) to a team rules markdown file"
+    required: false
+    default: ".gitfox/rules.md"
+  scan-all:
+    description: "If true, scan ALL open PRs and issues (first-launch / catch-up mode)"
+    required: false
+    default: "false"
+  max-scan-items:
+    description: "Maximum items handled during a full scan (runner time safety cap)"
+    required: false
+    default: "10"
+  max-comments:
+    description: "Maximum inline findings posted per PR review"
+    required: false
+    default: "10"
+  ollama-url:
+    description: "Base URL of the Ollama server"
+    required: false
+    default: "http://127.0.0.1:11434"
+  post-suggestions:
+    description: "Include ready-to-apply code suggestion blocks when the model provides them"
+    required: false
+    default: "true"
+  search-fixed:
+    description: "Search closed PRs/issues for prior fixes and reference them"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Install action dependencies
+      shell: bash
+      run: |
+        cd "$GITHUB_ACTION_PATH"
+        npm ci --omit=dev --no-audit --no-fund
+
+    - name: Install Ollama
+      shell: bash
+      run: |
+        if ! command -v ollama >/dev/null 2>&1; then
+          curl -fsSL https://ollama.com/install.sh | sh
+        fi
+
+    - name: Start Ollama server and pull model
+      shell: bash
+      env:
+        GITFOX_MODEL: ${{ inputs.model }}
+      run: |
+        ollama serve > /tmp/ollama.log 2>&1 &
+        for i in $(seq 1 60); do
+          if curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
+            break
+          fi
+          sleep 1
+        done
+        if ! curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
+          echo "::error::Ollama server failed to start"
+          cat /tmp/ollama.log
+          exit 1
+        fi
+        ollama pull "$GITFOX_MODEL"
+
+    - name: Run gitfox
+      shell: bash
+      env:
+        GITFOX_GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITFOX_MODEL: ${{ inputs.model }}
+        GITFOX_RULES_PATH: ${{ inputs.rules-path }}
+        GITFOX_SCAN_ALL: ${{ inputs.scan-all }}
+        GITFOX_MAX_SCAN_ITEMS: ${{ inputs.max-scan-items }}
+        GITFOX_MAX_COMMENTS: ${{ inputs.max-comments }}
+        GITFOX_OLLAMA_URL: ${{ inputs.ollama-url }}
+        GITFOX_POST_SUGGESTIONS: ${{ inputs.post-suggestions }}
+        GITFOX_SEARCH_FIXED: ${{ inputs.search-fixed }}
+      run: node "$GITHUB_ACTION_PATH/dist/index.js"

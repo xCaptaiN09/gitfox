@@ -1,0 +1,32 @@
+{
+  "name": "gitfox",
+  "version": "1.0.0",
+  "description": "Private AI code review & issue triage GitHub Action powered by a local Ollama model",
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "package": "ncc build src/main.ts -o dist"
+  },
+  "keywords": [
+    "github-action",
+    "code-review",
+    "ollama",
+    "ai",
+    "pull-request",
+    "issue-triage"
+  ],
+  "author": "Muhammed Dilshad A (xCaptaiN09)",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vercel/ncc": "^0.38.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

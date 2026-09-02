@@ -1,0 +1,208 @@
+import { getOctokit } from '@actions/github';
+import { GitHubApiError } from './errors';
+import { hasMarker, markerFor } from './markers';
+import type { IssueContext, PullRequestContext } from './types';
+
+const PR_KIND = 'pr-review';
+const ISSUE_KIND = 'issue-triage';
+const ITEMS_PER_PAGE = 100;
+
+interface RepoRef {
+  owner: string;
+  repo: string;
+}
+
+export interface PriorFixResult {
+  number: number;
+  title: string;
+  url: string;
+}
+
+export class GitHubClient {
+  private readonly octokit: ReturnType<typeof getOctokit>;
+
+  public constructor(token: string) {
+    try {
+      this.octokit = getOctokit(token);
+    } catch (error) {
+      throw new GitHubApiError('Failed to initialize GitHub client from token', { cause: error });
+    }
+  }
+
+  private wrap(error: unknown, what: string): GitHubApiError {
+    if (error instanceof GitHubApiError) {
+      return error;
+    }
+    const status = typeof error === 'object' && error !== null && 'status' in error
+      ? (error as { status?: unknown }).status
+      : undefined;
+    const statusNumber = typeof status === 'number' ? status : undefined;
+    const message = error instanceof Error ? error.message : String(error);
+    return new GitHubApiError(`GitHub API failed while ${what}: ${message}`, { cause: error, status: statusNumber });
+  }
+
+  public async getPullRequest(ref: RepoRef, number: number): Promise<PullRequestContext> {
+    try {
+      const { data: pr } = await this.octokit.rest.pulls.get({
+        owner: ref.owner,
+        repo: ref.repo,
+        pull_number: number
+      });
+      const diffResponse = await this.octokit.rest.pulls.get({
+        owner: ref.owner,
+        repo: ref.repo,
+        pull_number: number,
+        mediaType: { format: 'diff' }
+      });
+      const diff = typeof diffResponse.data === 'string' ? diffResponse.data : '';
+      return {
+        number,
+        title: pr.title ?? '',
+        body: pr.body ?? '',
+        author: pr.user?.login ?? 'unknown',
+        diff,
+        files: []
+      };
+    } catch (error) {
+      throw this.wrap(error, `fetching pull request #${number}`);
+    }
+  }
+
+  public async getIssue(ref: RepoRef, number: number): Promise<IssueContext> {
+    try {
+      const { data: issue } = await this.octokit.rest.issues.get({
+        owner: ref.owner,
+        repo: ref.repo,
+        issue_number: number
+      });
+      return {
+        number,
+        title: issue.title ?? '',
+        body: issue.body ?? '',
+        author: issue.user?.login ?? 'unknown',
+        labels: issue.labels
+          .map((label) => (typeof label === 'string' ? label : label.name ?? ''))
+          .filter((name) => name !== '')
+      };
+    } catch (error) {
+      throw this.wrap(error, `fetching issue #${number}`);
+    }
+  }
+
+  public async listOpenPullRequests(ref: RepoRef): Promise<number[]> {
+    try {
+      const { data } = await this.octokit.rest.pulls.list({
+        owner: ref.owner,
+        repo: ref.repo,
+        state: 'open',
+        per_page: ITEMS_PER_PAGE
+      });
+      return data.map((pr) => pr.number);
+    } catch (error) {
+      throw this.wrap(error, 'listing open pull requests');
+    }
+  }
+
+  public async listOpenIssues(ref: RepoRef): Promise<number[]> {
+    try {
+      const { data } = await this.octokit.rest.issues.listForRepo({
+        owner: ref.owner,
+        repo: ref.repo,
+        state: 'open',
+        per_page: ITEMS_PER_PAGE
+      });
+      return data
+        .filter((issue) => issue.pull_request === undefined)
+        .map((issue) => issue.number);
+    } catch (error) {
+      throw this.wrap(error, 'listing open issues');
+    }
+  }
+
+  public async listCommentBodies(ref: RepoRef, number: number): Promise<string[]> {
+    try {
+      const { data } = await this.octokit.rest.issues.listComments({
+        owner: ref.owner,
+        repo: ref.repo,
+        issue_number: number,
+        per_page: ITEMS_PER_PAGE
+      });
+      return data.map((comment) => comment.body ?? '');
+    } catch (error) {
+      throw this.wrap(error, `listing comments on #${number}`);
+    }
+  }
+
+  public async createComment(ref: RepoRef, number: number, body: string): Promise<void> {
+    try {
+      await this.octokit.rest.issues.createComment({
+        owner: ref.owner,
+        repo: ref.repo,
+        issue_number: number,
+        body
+      });
+    } catch (error) {
+      throw this.wrap(error, `posting comment on #${number}`);
+    }
+  }
+
+  public async addLabels(ref: RepoRef, number: number, labels: string[]): Promise<void> {
+    try {
+      await this.octokit.rest.issues.addLabels({
+        owner: ref.owner,
+        repo: ref.repo,
+        issue_number: number,
+        labels
+      });
+    } catch (error) {
+      throw this.wrap(error, `adding labels to #${number}`);
+    }
+  }
+
+  public async searchClosedFixes(ref: RepoRef, keywords: string[]): Promise<PriorFixResult[]> {
+    if (keywords.length === 0) {
+      return [];
+    }
+    const query = [
+      `repo:${ref.owner}/${ref.repo}`,
+      'is:closed',
+      ...keywords.slice(0, 5)
+    ].join(' ');
+
+    try {
+      const response = await this.octokit.rest.search.issuesAndPullRequests({
+        q: query,
+        per_page: 3,
+        sort: 'updated',
+        order: 'desc'
+      });
+      return response.data.items.map((item) => ({
+        number: item.number,
+        title: item.title ?? '',
+        url: item.html_url ?? ''
+      }));
+    } catch (error) {
+      throw this.wrap(error, 'searching closed PRs/issues for prior fixes');
+    }
+  }
+
+  public async alreadyRepliedToPr(ref: RepoRef, number: number): Promise<boolean> {
+    const bodies = await this.listCommentBodies(ref, number);
+    return hasMarker(bodies, PR_KIND, number);
+  }
+
+  public async alreadyRepliedToIssue(ref: RepoRef, number: number): Promise<boolean> {
+    const bodies = await this.listCommentBodies(ref, number);
+    return hasMarker(bodies, ISSUE_KIND, number);
+  }
+
+  public prMarker(number: number): string {
+    return markerFor(PR_KIND, number);
+  }
+
+  public issueMarker(number: number): string {
+    return markerFor(ISSUE_KIND, number);
+  }
+}
+
+export { PR_KIND, ISSUE_KIND, markerFor };
