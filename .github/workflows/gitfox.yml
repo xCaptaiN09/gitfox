@@ -1,0 +1,27 @@
+# gitfox reviewing its own PRs 🦊
+name: gitfox
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      scan_all:
+        description: 'Scan all open PRs and issues'
+        type: boolean
+        default: false
+
+jobs:
+  gitfox:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: xCaptaiN09/gitfox@v1
+        with:
+          model: qwen2.5-coder:0.5b
+          scan-all: ${{ github.event.inputs.scan_all == 'true' }}
