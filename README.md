@@ -1,4 +1,4 @@
-# gitfox 🦊
+# 🦊 gitfox
 
 **Private AI code review & issue triage for GitHub — powered by a local Ollama model.**
 
@@ -49,16 +49,16 @@ gitfox will scan all open PRs and issues and reply to any it has not already han
 
 ## Inputs
 
-| Input | Default | Description |
-|---|---|---|
-| `github-token` | `${{ github.token }}` | Token used to read PRs/issues and post comments |
-| `model` | `qwen2.5-coder:7b` | Any Ollama model tag |
-| `rules-path` | `.gitfox/rules.md` | Path to the team rules file (optional) |
-| `scan-all` | `false` | Scan all open PRs/issues (catch-up mode) |
-| `max-scan-items` | `10` | Safety cap for scan runs |
-| `max-comments` | `10` | Maximum findings posted per PR |
-| `post-suggestions` | `true` | Include apply-ready suggestion blocks |
-| `search-fixed` | `true` | Link to closed PRs/issues that may already fix a problem |
+| Input              | Default               | Description                                              |
+| ------------------ | --------------------- | -------------------------------------------------------- |
+| `github-token`     | `${{ github.token }}` | Token used to read PRs/issues and post comments          |
+| `model`            | `qwen2.5-coder:7b`    | Any Ollama model tag                                     |
+| `rules-path`       | `.gitfox/rules.md`    | Path to the team rules file (optional)                   |
+| `scan-all`         | `false`               | Scan all open PRs/issues (catch-up mode)                 |
+| `max-scan-items`   | `10`                  | Safety cap for scan runs                                 |
+| `max-comments`     | `10`                  | Maximum findings posted per PR                           |
+| `post-suggestions` | `true`                | Include apply-ready suggestion blocks                    |
+| `search-fixed`     | `true`                | Link to closed PRs/issues that may already fix a problem |
 
 ## Team rules
 
@@ -66,6 +66,7 @@ Create `.gitfox/rules.md` in your repository:
 
 ```markdown
 # Our review rules
+
 - All user input must be validated before parsing.
 - No `any` types in TypeScript.
 - Use parameterized SQL queries only.
@@ -91,4 +92,3 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 ## License
 
 [MIT](LICENSE)
-
