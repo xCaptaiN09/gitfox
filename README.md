@@ -1,4 +1,4 @@
-# gitfox
+# gitfox 🦊
 
 **Private AI code review & issue triage for GitHub — powered by a local Ollama model.**
 
@@ -6,7 +6,8 @@ Your code never leaves the runner. No API keys. No cloud LLM. Free forever.
 
 ## Features
 
-- **PR review** — detects bugs, security issues, and bad practices in pull request diffs, with severity labels (critical / warning / suggestion)
+- **PR review** — detects bugs, security issues, and bad practices in pull request diffs, with severity labels:
+  - 🔴 critical · 🟡 warning · 🟢 suggestion
 - **Issue triage** — auto-labels new issues (`bug`, `enhancement`, `question`, ...) and posts a helpful comment
 - **Catch-up scan** — run once with `scan-all: true` to review all currently open PRs and issues
 - **Deduplication** — invisible comment markers ensure gitfox replies to each PR/issue only once
