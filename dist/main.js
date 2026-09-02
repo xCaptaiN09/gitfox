@@ -108,7 +108,7 @@ async function runPullRequest(config) {
     const github = new github_client_1.GitHubClient(config.token);
     const ollama = new ollama_client_1.OllamaClient(config.ollamaUrl, config.model);
     const ref = repoRef();
-    const headSha = typeof payload.pull_request.head?.sha === 'string' ? payload.pull_request.head.sha : undefined;
+    const headSha = typeof payload.head?.sha === 'string' ? payload.head.sha : undefined;
     if (await github.alreadyRepliedToPr(ref, payload.number, headSha)) {
         core.info(`gitfox: already reviewed PR #${payload.number} at commit ${headSha?.slice(0, 7) ?? 'unknown'}, skipping`);
         return;
