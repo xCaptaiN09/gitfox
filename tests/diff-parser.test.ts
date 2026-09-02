@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { formatDiffForPrompt, parseDiff, truncatePatch } from '../src/diff-parser';
+import { formatDiffForPrompt, isLineInDiff, parseDiff, truncatePatch } from '../src/diff-parser';
 
 const SAMPLE_DIFF = [
   'diff --git a/src/index.js b/src/index.js',
@@ -62,6 +62,22 @@ describe('truncatePatch', () => {
     const result = truncatePatch(long, 10);
     assert.ok(result.startsWith('xxxxxxxxxx'));
     assert.ok(result.includes('truncated'));
+  });
+});
+
+describe('isLineInDiff', () => {
+  const files = parseDiff(SAMPLE_DIFF);
+
+  it('accepts lines inside a hunk', () => {
+    assert.equal(isLineInDiff(files[0], 3), true);
+  });
+
+  it('rejects lines outside the hunk', () => {
+    assert.equal(isLineInDiff(files[0], 999), false);
+  });
+
+  it('rejects when patch is missing', () => {
+    assert.equal(isLineInDiff({ path: 'x', patch: null }, 1), false);
   });
 });
 

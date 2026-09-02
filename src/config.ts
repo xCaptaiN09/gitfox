@@ -82,6 +82,7 @@ export function loadConfig(): GitfoxConfig {
     maxComments: parseIntEnv('GITFOX_MAX_COMMENTS', 10, 1, 50),
     ollamaUrl: ollamaUrl.replace(/\/+$/, ''),
     postSuggestions: parseBoolEnv('GITFOX_POST_SUGGESTIONS', true),
-    searchFixed: parseBoolEnv('GITFOX_SEARCH_FIXED', true)
+    searchFixed: parseBoolEnv('GITFOX_SEARCH_FIXED', true),
+    inlineComments: parseBoolEnv('GITFOX_INLINE_COMMENTS', true)
   };
 }

@@ -60,6 +60,7 @@ export class GitHubClient {
         title: pr.title ?? '',
         body: pr.body ?? '',
         author: pr.user?.login ?? 'unknown',
+        headSha: pr.head?.sha ?? '',
         diff,
         files: []
       };
@@ -159,6 +160,33 @@ export class GitHubClient {
     }
   }
 
+  public async createInlineReview(
+    ref: RepoRef,
+    number: number,
+    body: string,
+    comments: Array<{ path: string; line: number; body: string }>
+  ): Promise<boolean> {
+    try {
+      await this.octokit.rest.pulls.createReview({
+        owner: ref.owner,
+        repo: ref.repo,
+        pull_number: number,
+        event: 'COMMENT',
+        body,
+        comments
+      });
+      return true;
+    } catch (error) {
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: unknown }).status
+        : undefined;
+      if (status === 422 || status === 400 || status === 404) {
+        return false;
+      }
+      throw this.wrap(error, `posting inline review on #${number}`);
+    }
+  }
+
   public async searchClosedFixes(ref: RepoRef, keywords: string[]): Promise<PriorFixResult[]> {
     if (keywords.length === 0) {
       return [];
@@ -186,9 +214,9 @@ export class GitHubClient {
     }
   }
 
-  public async alreadyRepliedToPr(ref: RepoRef, number: number): Promise<boolean> {
+  public async alreadyRepliedToPr(ref: RepoRef, number: number, headSha?: string): Promise<boolean> {
     const bodies = await this.listCommentBodies(ref, number);
-    return hasMarker(bodies, PR_KIND, number);
+    return hasMarker(bodies, PR_KIND, number, headSha);
   }
 
   public async alreadyRepliedToIssue(ref: RepoRef, number: number): Promise<boolean> {
@@ -196,8 +224,8 @@ export class GitHubClient {
     return hasMarker(bodies, ISSUE_KIND, number);
   }
 
-  public prMarker(number: number): string {
-    return markerFor(PR_KIND, number);
+  public prMarker(number: number, headSha?: string): string {
+    return markerFor(PR_KIND, number, headSha);
   }
 
   public issueMarker(number: number): string {

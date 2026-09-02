@@ -88,17 +88,39 @@ const SEVERITY_EMOJI: Record<Severity, string> = {
   suggestion: '🟢'
 };
 
+export { SEVERITY_EMOJI };
+
 export function renderReviewComment(
   pr: PullRequestContext,
   result: ReviewResult,
   priorFixes: PriorFixResult[],
   marker: string,
-  postSuggestions: boolean
+  postSuggestions: boolean,
+  commitSha?: string,
+  inlineCount?: number
 ): string {
   const sections: string[] = [];
   sections.push(`${marker}`);
   sections.push(`## 🦊 gitfox review of #${pr.number}`);
+  if (commitSha !== undefined && commitSha !== '') {
+    sections.push(`Reviewed commit: \`${commitSha.slice(0, 7)}\``);
+  }
+
+  const critical = result.findings.filter((f) => f.severity === 'critical').length;
+  const warnings = result.findings.filter((f) => f.severity === 'warning').length;
+  const suggestions = result.findings.filter((f) => f.severity === 'suggestion').length;
+  const verdict = critical > 0 ? '🔴 Fix required' : warnings > 0 ? '⚠️ Improvements advised' : '✅ Looks good';
+  sections.push(
+    '| Files changed | 🔴 Critical | 🟡 Warning | 🟢 Suggestion | Verdict |\n' +
+    '|---|---|---|---|---|\n' +
+    `| ${pr.files.length} | ${critical} | ${warnings} | ${suggestions} | ${verdict} |`
+  );
+
   sections.push(result.summary === '' ? '*(no summary returned)*' : result.summary);
+
+  if (inlineCount !== undefined && inlineCount > 0) {
+    sections.push(`📍 ${inlineCount} finding(s) posted inline on the changed lines.`);
+  }
 
   if (result.findings.length === 0) {
     sections.push('✅ **No issues found.** Looks good to me!');

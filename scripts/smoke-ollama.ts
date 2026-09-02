@@ -9,6 +9,7 @@ const fakePr: PullRequestContext = {
   title: 'Add user login endpoint',
   body: 'Adds POST /login using the new user table.',
   author: 'tester',
+  headSha: 'abc1234def5678',
   files: [],
   diff: [
     'diff --git a/src/login.js b/src/login.js',

@@ -26,6 +26,8 @@ on:
     types: [opened, synchronize, reopened]
   issues:
     types: [opened]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
 
 jobs:
@@ -41,6 +43,10 @@ jobs:
 ```
 
 No configuration, accounts, or API keys are required.
+
+### Commands
+
+Comment `/gitfox` or `@gitfox` on any PR or issue and gitfox will re-run its review or triage. Without a mention, gitfox stays silent on follow-up comments.
 
 ### First launch on an existing repository
 

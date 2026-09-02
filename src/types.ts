@@ -10,6 +10,7 @@ export interface PullRequestContext {
   title: string;
   body: string;
   author: string;
+  headSha: string;
   diff: string;
   files: DiffFile[];
 }
@@ -57,4 +58,5 @@ export interface GitfoxConfig {
   ollamaUrl: string;
   postSuggestions: boolean;
   searchFixed: boolean;
+  inlineComments: boolean;
 }

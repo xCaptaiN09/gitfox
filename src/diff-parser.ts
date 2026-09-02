@@ -42,6 +42,30 @@ export function truncatePatch(patch: string, maxChars: number = MAX_PATCH_CHARS_
   return `${patch.slice(0, maxChars)}\n... [patch truncated, ${patch.length - maxChars} chars omitted]`;
 }
 
+export function extractHunkRanges(patch: string): Array<{ start: number; count: number }> {
+  const ranges: Array<{ start: number; count: number }> = [];
+  const hunkRegex = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm;
+  let match: RegExpExecArray | null;
+  while ((match = hunkRegex.exec(patch)) !== null) {
+    const start = Number.parseInt(match[1], 10);
+    const count = match[2] !== undefined ? Number.parseInt(match[2], 10) : 1;
+    ranges.push({ start, count });
+  }
+  return ranges;
+}
+
+export function isLineInDiff(file: DiffFile, line: number): boolean {
+  if (file.patch === null || !Number.isInteger(line) || line <= 0) {
+    return false;
+  }
+  for (const range of extractHunkRanges(file.patch)) {
+    if (line >= range.start && line < range.start + Math.max(range.count, 1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function formatDiffForPrompt(files: DiffFile[], maxTotalChars: number = 60000): string {
   const sections: string[] = [];
   let totalChars = 0;

@@ -1,9 +1,10 @@
 import { extractKeywords } from './keywords';
+import { isLineInDiff } from './diff-parser';
 import type { GitHubClient, PriorFixResult } from './github-client';
 import type { OllamaClient } from './ollama-client';
-import { reviewPullRequest, renderReviewComment } from './reviewer';
+import { reviewPullRequest, renderReviewComment, SEVERITY_EMOJI } from './reviewer';
 import { renderTriageComment, triageIssue } from './triager';
-import type { GitfoxConfig, IssueContext, PullRequestContext } from './types';
+import type { Finding, GitfoxConfig, IssueContext, PullRequestContext, ReviewResult } from './types';
 
 export interface ScanStats {
   prsReviewed: number;
@@ -78,7 +79,8 @@ export async function reviewAndPost(
   ollama: OllamaClient,
   config: GitfoxConfig,
   ref: RepoRef,
-  pr: PullRequestContext
+  pr: PullRequestContext,
+  headSha?: string
 ): Promise<void> {
   const result = await reviewPullRequest(ollama, pr, config.rulesContent, config.maxComments);
 
@@ -88,8 +90,48 @@ export async function reviewAndPost(
     priorFixes = await github.searchClosedFixes(ref, keywords).catch(() => []);
   }
 
-  const body = renderReviewComment(pr, result, priorFixes, github.prMarker(pr.number), config.postSuggestions);
-  await github.createComment(ref, pr.number, body);
+  const inlineFindings = selectInlineFindings(pr, result);
+  let inlinePosted = false;
+
+  if (config.inlineComments && inlineFindings.length > 0) {
+    const comments = inlineFindings.map((finding) => ({
+      path: finding.file,
+      line: finding.line as number,
+      body: renderInlineComment(finding, config.postSuggestions)
+    }));
+    const remaining = result.findings.filter((f) => !inlineFindings.includes(f));
+    const summaryBody = renderReviewComment(pr, { ...result, findings: remaining }, priorFixes, github.prMarker(pr.number, headSha), config.postSuggestions, headSha, inlineFindings.length);
+    inlinePosted = await github.createInlineReview(ref, pr.number, summaryBody, comments).catch(() => false);
+  }
+
+  if (!inlinePosted) {
+    const body = renderReviewComment(pr, result, priorFixes, github.prMarker(pr.number, headSha), config.postSuggestions, headSha);
+    await github.createComment(ref, pr.number, body);
+  }
+}
+
+export function selectInlineFindings(pr: PullRequestContext, result: ReviewResult): Finding[] {
+  const selected: Finding[] = [];
+  for (const finding of result.findings) {
+    if (finding.line === undefined) {
+      continue;
+    }
+    const file = pr.files.find((candidate) => candidate.path === finding.file);
+    if (file === undefined || !isLineInDiff(file, finding.line)) {
+      continue;
+    }
+    selected.push(finding);
+  }
+  return selected;
+}
+
+export function renderInlineComment(finding: Finding, postSuggestions: boolean): string {
+  const emoji = SEVERITY_EMOJI[finding.severity];
+  const parts = [`${emoji} ${finding.comment}`];
+  if (postSuggestions && finding.suggestion !== undefined) {
+    parts.push('```suggestion\n' + finding.suggestion + '\n```');
+  }
+  return parts.join('\n\n');
 }
 
 export async function triageAndPost(

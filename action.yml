@@ -41,6 +41,10 @@ inputs:
     description: "Include ready-to-apply code suggestion blocks when the model provides them"
     required: false
     default: "true"
+  inline-comments:
+    description: "Post findings as inline review comments on the exact changed lines when possible"
+    required: false
+    default: "true"
   search-fixed:
     description: "Search closed PRs/issues for prior fixes and reference them"
     required: false
@@ -97,4 +101,5 @@ runs:
         GITFOX_OLLAMA_URL: ${{ inputs.ollama-url }}
         GITFOX_POST_SUGGESTIONS: ${{ inputs.post-suggestions }}
         GITFOX_SEARCH_FIXED: ${{ inputs.search-fixed }}
+        GITFOX_INLINE_COMMENTS: ${{ inputs.inline-comments }}
       run: node "$GITHUB_ACTION_PATH/dist/index.js"
