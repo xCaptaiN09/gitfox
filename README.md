@@ -1,4 +1,4 @@
-# 🦊 gitfox
+# 🦊 Gitfox
 
 **Private AI code review & issue triage for GitHub — powered by a local Ollama model.**
 
