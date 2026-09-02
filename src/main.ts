@@ -86,13 +86,13 @@ async function runPullRequest(config: GitfoxConfig): Promise<void> {
   const ollama = new OllamaClient(config.ollamaUrl, config.model);
   const ref = repoRef();
 
-  if (await github.alreadyRepliedToPr(ref, payload.number)) {
-    core.info(`gitfox: already reviewed PR #${payload.number}, skipping`);
+  const headSha = typeof payload.pull_request.head?.sha === 'string' ? payload.pull_request.head.sha : undefined;
+  if (await github.alreadyRepliedToPr(ref, payload.number, headSha)) {
+    core.info(`gitfox: already reviewed PR #${payload.number} at commit ${headSha?.slice(0, 7) ?? 'unknown'}, skipping`);
     return;
   }
 
   const pr = await github.getPullRequest(ref, payload.number);
-  const headSha = typeof payload.pull_request.head?.sha === 'string' ? payload.pull_request.head.sha : undefined;
   core.info(`gitfox: reviewing PR #${pr.number} — ${pr.title}`);
   await reviewAndPost(github, ollama, config, ref, pr, headSha);
   core.info('gitfox: review posted');
