@@ -1,27 +1,22 @@
-# 🦊 gitfox
+# gitfox
 
 **Private AI code review & issue triage for GitHub — powered by a local Ollama model.**
 
-> Your code never leaves the runner. No API keys. No cloud LLM. Free forever.
+Your code never leaves the runner. No API keys. No cloud LLM. Free forever.
 
-![gitfox](https://img.shields.io/badge/AI-local%20Ollama-orange) ![privacy](https://img.shields.io/badge/privacy-100%25%20local-green)
+## Features
 
----
+- **PR review** — detects bugs, security issues, and bad practices in pull request diffs, with severity labels (critical / warning / suggestion)
+- **Issue triage** — auto-labels new issues (`bug`, `enhancement`, `question`, ...) and posts a helpful comment
+- **Catch-up scan** — run once with `scan-all: true` to review all currently open PRs and issues
+- **Deduplication** — invisible comment markers ensure gitfox replies to each PR/issue only once
+- **Team rules** — a `.gitfox/rules.md` file in your repo defines project-specific standards that gitfox enforces
+- **Suggested fixes** — posts ready-to-apply GitHub suggestion blocks where possible
+- **Prior fix detection** — searches closed PRs/issues for related fixes and links them
 
-## ✨ Features
+## Quick start
 
-- 🔍 **PR review** — bugs, security issues, bad practices — with severity tags
-  - 🔴 critical · 🟡 warning · 🟢 suggestion
-- 🐛 **Issue triage** — auto-labels (`bug`, `enhancement`, `question`, …) + a helpful comment
-- 🧹 **Catch-up scan** — first launch? Run once with `scan-all: true` and gitfox reviews ALL open PRs/issues
-- 🔁 **Never spams** — invisible markers ensure gitfox replies to each PR/issue only once
-- 📝 **Team rules** — drop a `.gitfox/rules.md` file and gitfox enforces *your* standards
-- 🛠️ **Suggested fixes** — ready-to-apply GitHub suggestion blocks
-- 🔎 **"Already fixed?" detection** — searches closed PRs/issues and links prior fixes
-
-## 🚀 Quick start
-
-Create `.github/workflows/gitfox.yml` in your repo:
+Create `.github/workflows/gitfox.yml` in your repository:
 
 ```yaml
 name: gitfox
@@ -30,7 +25,7 @@ on:
     types: [opened, synchronize, reopened]
   issues:
     types: [opened]
-  workflow_dispatch:        # enables the catch-up scan
+  workflow_dispatch:
 
 jobs:
   gitfox:
@@ -44,29 +39,29 @@ jobs:
       - uses: xCaptaiN09/gitfox@v1
 ```
 
-That's it. Zero config. Zero API keys. 🎉
+No configuration, accounts, or API keys are required.
 
-### First launch (existing repos)
+### First launch on an existing repository
 
-Open the **Actions** tab → **gitfox** → **Run workflow** with `scan_all: true`.
-gitfox will scan all open PRs and issues and reply to anything it hasn't seen yet.
+Open the **Actions** tab, select **gitfox**, and run the workflow with `scan_all: true`.
+gitfox will scan all open PRs and issues and reply to any it has not already handled.
 
-## ⚙️ Inputs
+## Inputs
 
 | Input | Default | Description |
 |---|---|---|
-| `github-token` | `${{ github.token }}` | Token for reading/posting |
+| `github-token` | `${{ github.token }}` | Token used to read PRs/issues and post comments |
 | `model` | `qwen2.5-coder:7b` | Any Ollama model tag |
-| `rules-path` | `.gitfox/rules.md` | Team rules file (optional) |
-| `scan-all` | `false` | Scan ALL open PRs/issues (catch-up mode) |
+| `rules-path` | `.gitfox/rules.md` | Path to the team rules file (optional) |
+| `scan-all` | `false` | Scan all open PRs/issues (catch-up mode) |
 | `max-scan-items` | `10` | Safety cap for scan runs |
-| `max-comments` | `10` | Max findings posted per PR |
+| `max-comments` | `10` | Maximum findings posted per PR |
 | `post-suggestions` | `true` | Include apply-ready suggestion blocks |
 | `search-fixed` | `true` | Link to closed PRs/issues that may already fix a problem |
 
-## 📝 Team rules
+## Team rules
 
-Create `.gitfox/rules.md` in your repo:
+Create `.gitfox/rules.md` in your repository:
 
 ```markdown
 # Our review rules
@@ -76,23 +71,23 @@ Create `.gitfox/rules.md` in your repo:
 - Every public function needs a doc comment.
 ```
 
-gitfox reads it on every run and enforces it. 🦊
+gitfox reads this file on every run and enforces it during review and triage.
 
-## 🤖 Model choice
+## Model choice
 
-Default is `qwen2.5-coder:7b` — a good balance for GitHub's free runners.
-Smaller repos or tight budgets: `qwen2.5-coder:0.5b`. Bigger runners: `qwen2.5-coder:14b`.
+The default model is `qwen2.5-coder:7b`, which balances review quality and runtime on GitHub's free runners. Use `qwen2.5-coder:0.5b` for faster, lighter runs, or larger models on bigger runners.
 
-## 🔒 Privacy
+## Privacy
 
-gitfox runs the model **on the GitHub runner itself** via Ollama:
+gitfox runs the model on the GitHub Actions runner itself via Ollama:
 
 ```
-your code → runner (Ollama) → review comment → runner destroyed
+your code -> runner (Ollama) -> review comment -> runner destroyed
 ```
 
-Nothing is sent to OpenAI, Anthropic, or GitHub's Copilot cloud.
+No code is sent to OpenAI, Anthropic, or any other cloud service.
 
-## 📄 License
+## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE)
+
