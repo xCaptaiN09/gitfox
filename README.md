@@ -1,3 +1,7 @@
+<div align="center">
+  <img src=".github/assets/banner.webp" alt="gitfox — AI code review &amp; issue triage for GitHub, powered by a local Ollama model" width="720">
+</div>
+
 # 🦊 Gitfox
 
 ![Release](https://img.shields.io/github/v/release/xCaptaiN09/gitfox) ![License](https://img.shields.io/github/license/xCaptaiN09/gitfox) ![Tests](https://img.shields.io/badge/tests-35%2F35-brightgreen)
