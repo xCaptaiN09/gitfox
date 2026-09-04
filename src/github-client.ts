@@ -1,6 +1,6 @@
 import { getOctokit } from '@actions/github';
 import { GitHubApiError } from './errors';
-import { hasMarker, markerFor } from './markers';
+import { hasAnyMarker, hasMarker, markerFor } from './markers';
 import type { IssueContext, PullRequestContext } from './types';
 
 const PR_KIND = 'pr-review';
@@ -134,6 +134,20 @@ export class GitHubClient {
     }
   }
 
+  public async listReviewBodies(ref: RepoRef, number: number): Promise<string[]> {
+    try {
+      const { data } = await this.octokit.rest.pulls.listReviews({
+        owner: ref.owner,
+        repo: ref.repo,
+        pull_number: number,
+        per_page: ITEMS_PER_PAGE
+      });
+      return data.map((review) => review.body ?? '');
+    } catch (error) {
+      throw this.wrap(error, `listing reviews on PR #${number}`);
+    }
+  }
+
   public async createComment(ref: RepoRef, number: number, body: string): Promise<void> {
     try {
       await this.octokit.rest.issues.createComment({
@@ -215,8 +229,15 @@ export class GitHubClient {
   }
 
   public async alreadyRepliedToPr(ref: RepoRef, number: number, headSha?: string): Promise<boolean> {
-    const bodies = await this.listCommentBodies(ref, number);
-    return hasMarker(bodies, PR_KIND, number, headSha);
+    const [comments, reviews] = await Promise.all([
+      this.listCommentBodies(ref, number),
+      this.listReviewBodies(ref, number).catch(() => [])
+    ]);
+    const bodies = [...comments, ...reviews];
+    if (headSha !== undefined && headSha !== '') {
+      return hasMarker(bodies, PR_KIND, number, headSha);
+    }
+    return hasAnyMarker(bodies, PR_KIND, number);
   }
 
   public async alreadyRepliedToIssue(ref: RepoRef, number: number): Promise<boolean> {

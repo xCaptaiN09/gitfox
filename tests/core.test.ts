@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { extractJson } from '../src/prompts';
-import { hasMarker, markerFor } from '../src/markers';
+import { hasAnyMarker, hasMarker, markerFor } from '../src/markers';
 import { extractKeywords } from '../src/keywords';
 
 describe('extractJson', () => {
@@ -34,6 +34,19 @@ describe('markers', () => {
     const comments = ['some text', '## 🦊 gitfox\n<!-- gitfox:v1:issue-triage:7 -->'];
     assert.equal(hasMarker(comments, 'issue-triage', 7), true);
     assert.equal(hasMarker(comments, 'pr-review', 7), false);
+  });
+
+  it('hasAnyMarker matches any commit suffix', () => {
+    const bodies = ['text', '<!-- gitfox:v1:pr-review:1:abc1234 -->'];
+    assert.equal(hasAnyMarker(bodies, 'pr-review', 1), true);
+    assert.equal(hasAnyMarker(['<!-- gitfox:v1:pr-review:1 -->'], 'pr-review', 1), true);
+    assert.equal(hasAnyMarker(bodies, 'pr-review', 2), false);
+  });
+
+  it('hasAnyMarker does not match sibling issue numbers', () => {
+    const bodies = ['<!-- gitfox:v1:pr-review:10 -->'];
+    assert.equal(hasAnyMarker(bodies, 'pr-review', 1), false);
+    assert.equal(hasAnyMarker(bodies, 'pr-review', 10), true);
   });
 });
 

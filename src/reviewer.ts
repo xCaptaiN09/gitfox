@@ -97,8 +97,15 @@ export function renderReviewComment(
   marker: string,
   postSuggestions: boolean,
   commitSha?: string,
-  inlineCount?: number
+  inlineCount?: number,
+  totalFindings?: Finding[]
 ): string {
+  const all = totalFindings ?? result.findings;
+  const critical = all.filter((f) => f.severity === 'critical').length;
+  const warnings = all.filter((f) => f.severity === 'warning').length;
+  const suggestions = all.filter((f) => f.severity === 'suggestion').length;
+  const verdict = critical > 0 ? '🔴 Fix required' : warnings > 0 ? '⚠️ Improvements advised' : all.length > 0 ? '🟢 Minor notes' : '✅ Looks good';
+
   const sections: string[] = [];
   sections.push(`${marker}`);
   sections.push(`## 🦊 gitfox review of #${pr.number}`);
@@ -106,10 +113,6 @@ export function renderReviewComment(
     sections.push(`Reviewed commit: \`${commitSha.slice(0, 7)}\``);
   }
 
-  const critical = result.findings.filter((f) => f.severity === 'critical').length;
-  const warnings = result.findings.filter((f) => f.severity === 'warning').length;
-  const suggestions = result.findings.filter((f) => f.severity === 'suggestion').length;
-  const verdict = critical > 0 ? '🔴 Fix required' : warnings > 0 ? '⚠️ Improvements advised' : '✅ Looks good';
   sections.push(
     '| Files changed | 🔴 Critical | 🟡 Warning | 🟢 Suggestion | Verdict |\n' +
     '|---|---|---|---|---|\n' +
@@ -122,8 +125,10 @@ export function renderReviewComment(
     sections.push(`📍 ${inlineCount} finding(s) posted inline on the changed lines.`);
   }
 
-  if (result.findings.length === 0) {
+  if (all.length === 0) {
     sections.push('✅ **No issues found.** Looks good to me!');
+  } else if (inlineCount !== undefined && inlineCount >= all.length) {
+    // all findings are inline; nothing more to list
   } else {
     sections.push('### Findings');
     for (const finding of result.findings) {

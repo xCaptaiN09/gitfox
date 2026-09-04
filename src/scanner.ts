@@ -100,7 +100,7 @@ export async function reviewAndPost(
       body: renderInlineComment(finding, config.postSuggestions)
     }));
     const remaining = result.findings.filter((f) => !inlineFindings.includes(f));
-    const summaryBody = renderReviewComment(pr, { ...result, findings: remaining }, priorFixes, github.prMarker(pr.number, headSha), config.postSuggestions, headSha, inlineFindings.length);
+    const summaryBody = renderReviewComment(pr, { ...result, findings: remaining }, priorFixes, github.prMarker(pr.number, headSha), config.postSuggestions, headSha, inlineFindings.length, result.findings);
     inlinePosted = await github.createInlineReview(ref, pr.number, summaryBody, comments).catch(() => false);
   }
 

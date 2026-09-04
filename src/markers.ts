@@ -10,6 +10,11 @@ export function hasMarker(commentBodies: string[], kind: string, id: number, suf
   return commentBodies.some((body) => body.includes(marker));
 }
 
+export function hasAnyMarker(commentBodies: string[], kind: string, id: number): boolean {
+  const prefix = `${MARKER_PREFIX}${kind}:${id}`;
+  return commentBodies.some((body) => body.includes(`${prefix} -->`) || body.includes(`${prefix}:`));
+}
+
 export function isGitfoxMention(body: string): boolean {
   const normalized = body.toLowerCase();
   return normalized.includes('/gitfox') || normalized.includes('@gitfox');
