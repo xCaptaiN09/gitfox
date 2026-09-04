@@ -28,5 +28,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: xCaptaiN09/gitfox@v1
         with:
-          model: qwen2.5-coder:0.5b
+          model: qwen2.5-coder:7b
           scan-all: ${{ github.event.inputs.scan_all == 'true' }}

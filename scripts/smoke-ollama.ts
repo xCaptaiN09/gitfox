@@ -2,7 +2,7 @@ import { reviewPullRequest } from '../src/reviewer';
 import { OllamaClient } from '../src/ollama-client';
 import type { PullRequestContext } from '../src/types';
 
-const model = process.env.GITFOX_MODEL ?? 'qwen2.5-coder:0.5b';
+const model = process.env.GITFOX_MODEL ?? 'qwen2.5-coder:7b';
 
 const fakePr: PullRequestContext = {
   number: 1,
