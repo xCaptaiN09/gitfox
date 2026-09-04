@@ -121,6 +121,7 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.2.2** | 2026-09-04 | Action hardening verified in live end-to-end runs: sudo-free Ollama install into the runner temp dir, correct tarball URL (`.tar.zst`) with zstd extract + installer fallback, no workspace-scoped caches, Node 22, binary+model caching |
 | **v1.2.1** | 2026-09-04 | Model caching (Ollama binary + model persisted between runs — no more 4.7GB download every run), npm dependency cache, deterministic single Ollama server, 45-min job timeout guard, `qwen2.5-coder:7b` standardized everywhere |
 | **v1.2.0** | 2026-09-04 | `request-changes` mode blocks merges on critical findings, repo-context prompts (file tree + related source files), multi-line suggestions, 🚀/👍 progress reactions, incremental re-review of only new commits |
 | **v1.1.2** | 2026-09-04 | Retry once on malformed model output, then skip gracefully — model hiccups no longer fail the workflow. Summary-table counts fixed; dedup now also checks posted reviews, not just comments |
