@@ -71,9 +71,13 @@ runs:
   steps:
     - uses: actions/setup-node@v4
       with:
-        node-version: "20"
-        cache: npm
-        cache-dependency-path: ${{ github.action_path }}/package-lock.json
+        node-version: "22"
+
+    - name: Prepare cache directories
+      shell: bash
+      run: |
+        mkdir -p /usr/local/lib/ollama
+        mkdir -p "${{ runner.temp }}/ollama-models"
 
     - name: Cache Ollama binary
       id: ollama-bin
