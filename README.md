@@ -1,5 +1,7 @@
 # 🦊 Gitfox
 
+![Release](https://img.shields.io/github/v/release/xCaptaiN09/gitfox) ![License](https://img.shields.io/github/license/xCaptaiN09/gitfox) ![Tests](https://img.shields.io/badge/tests-21%2F21-brightgreen)
+
 **Private AI code review & issue triage for GitHub — powered by a local Ollama model.**
 
 Your code never leaves the runner. No API keys. No cloud LLM. Free forever.
@@ -104,3 +106,14 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 ## License
 
 [MIT](LICENSE)
+
+## Releases / Changelog
+
+| Version | Date | Highlights |
+|---------|------|------------|
+| **v1.1.2** | 2026-09-04 | Retry once on malformed model output, then skip gracefully — model hiccups no longer fail the workflow. Summary-table counts fixed; dedup now also checks posted reviews, not just comments |
+| **v1.1.0** | 2026-09-02 | Re-review on every new PR commit, `/gitfox` comment command, inline review comments on exact lines, summary table with verdict |
+| **v1.0.0** | 2026-09-02 | First release: PR review, issue triage, catch-up scan, dedup, team rules, suggested fixes |
+
+> Users always get the latest stable behavior via `uses: xCaptaiN09/gitfox@v1` — the tag is kept up to date with fixes.
+> Full notes: [Releases page](https://github.com/xCaptaiN09/gitfox/releases)
