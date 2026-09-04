@@ -21,6 +21,9 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
+    concurrency:
+      group: gitfox-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: xCaptaiN09/gitfox@v1

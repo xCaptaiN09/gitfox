@@ -37,12 +37,18 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
+    concurrency:
+      group: gitfox-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: xCaptaiN09/gitfox@v1
 ```
 
 No configuration, accounts, or API keys are required.
+
+> **Tip:** the `concurrency` block queues gitfox runs for the same PR/issue so parallel
+> events (a `/gitfox` command plus a new push, for example) never double-review.
 
 ### Commands
 
