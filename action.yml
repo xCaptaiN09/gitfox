@@ -72,6 +72,17 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: "20"
+        cache: npm
+        cache-dependency-path: ${{ github.action_path }}/package-lock.json
+
+    - name: Cache Ollama binary
+      id: ollama-bin
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/local/bin/ollama
+          /usr/local/lib/ollama
+        key: ollama-bin-linux-amd64-v1
 
     - name: Install action dependencies
       shell: bash
@@ -80,17 +91,31 @@ runs:
         npm ci --omit=dev --no-audit --no-fund
 
     - name: Install Ollama
+      if: steps.ollama-bin.outputs.cache-hit != 'true'
       shell: bash
       run: |
         if ! command -v ollama >/dev/null 2>&1; then
           curl -fsSL https://ollama.com/install.sh | sh
         fi
 
+    - name: Restore cached Ollama model
+      id: ollama-model
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/ollama-models
+        key: ollama-models-${{ inputs.model }}
+
     - name: Start Ollama server and pull model
       shell: bash
       env:
         GITFOX_MODEL: ${{ inputs.model }}
+        OLLAMA_MODELS: ${{ runner.temp }}/ollama-models
       run: |
+        # The install script starts a systemd service; use one deterministic
+        # server (as the runner user) so the cached model dir is always the
+        # one being served from.
+        sudo systemctl stop ollama 2>/dev/null || true
+        sudo systemctl disable ollama 2>/dev/null || true
         ollama serve > /tmp/ollama.log 2>&1 &
         for i in $(seq 1 60); do
           if curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
@@ -104,6 +129,13 @@ runs:
           exit 1
         fi
         ollama pull "$GITFOX_MODEL"
+
+    - name: Cache Ollama model
+      if: always() && steps.ollama-model.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/ollama-models
+        key: ollama-models-${{ inputs.model }}
 
     - name: Run gitfox
       shell: bash

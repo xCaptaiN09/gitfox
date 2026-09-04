@@ -39,6 +39,7 @@ on:
 jobs:
   gitfox:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       issues: write
