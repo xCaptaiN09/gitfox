@@ -1,5 +1,6 @@
 import { extractKeywords } from './keywords';
 import { isLineInDiff } from './diff-parser';
+import { ModelResponseError } from './errors';
 import type { GitHubClient, PriorFixResult } from './github-client';
 import type { OllamaClient } from './ollama-client';
 import { reviewPullRequest, renderReviewComment, SEVERITY_EMOJI } from './reviewer';
@@ -82,7 +83,16 @@ export async function reviewAndPost(
   pr: PullRequestContext,
   headSha?: string
 ): Promise<void> {
-  const result = await reviewPullRequest(ollama, pr, config.rulesContent, config.maxComments);
+  let result: ReviewResult;
+  try {
+    result = await reviewPullRequest(ollama, pr, config.rulesContent, config.maxComments);
+  } catch (error) {
+    if (!(error instanceof ModelResponseError)) {
+      throw error;
+    }
+    console.warn('gitfox: model returned malformed output for PR review, retrying once');
+    result = await reviewPullRequest(ollama, pr, config.rulesContent, config.maxComments);
+  }
 
   let priorFixes: PriorFixResult[] = [];
   if (config.searchFixed) {
@@ -141,7 +151,16 @@ export async function triageAndPost(
   ref: RepoRef,
   issue: IssueContext
 ): Promise<void> {
-  const result = await triageIssue(ollama, issue, config.rulesContent);
+  let result: Awaited<ReturnType<typeof triageIssue>>;
+  try {
+    result = await triageIssue(ollama, issue, config.rulesContent);
+  } catch (error) {
+    if (!(error instanceof ModelResponseError)) {
+      throw error;
+    }
+    console.warn('gitfox: model returned malformed output for issue triage, retrying once');
+    result = await triageIssue(ollama, issue, config.rulesContent);
+  }
 
   let priorFixes: PriorFixResult[] = [];
   if (config.searchFixed) {

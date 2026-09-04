@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import { context } from '@actions/github';
 import { loadConfig } from './config';
-import { GitHubApiError, GitfoxError } from './errors';
+import { GitHubApiError, GitfoxError, ModelResponseError } from './errors';
 import { GitHubClient } from './github-client';
 import { isGitfoxMention } from './markers';
 import { OllamaClient } from './ollama-client';
@@ -132,18 +132,26 @@ async function run(): Promise<void> {
     return;
   }
 
-  switch (context.eventName) {
-    case 'pull_request':
-      await runPullRequest(config);
-      break;
-    case 'issues':
-      await runIssue(config);
-      break;
-    case 'issue_comment':
-      await runCommentCommand(config);
-      break;
-    default:
-      core.info(`gitfox: unsupported event "${context.eventName}", nothing to do`);
+  try {
+    switch (context.eventName) {
+      case 'pull_request':
+        await runPullRequest(config);
+        break;
+      case 'issues':
+        await runIssue(config);
+        break;
+      case 'issue_comment':
+        await runCommentCommand(config);
+        break;
+      default:
+        core.info(`gitfox: unsupported event "${context.eventName}", nothing to do`);
+    }
+  } catch (error) {
+    if (error instanceof ModelResponseError) {
+      core.warning('gitfox: model output was unparseable even after a retry — skipping this run without posting a comment');
+      return;
+    }
+    throw error;
   }
 }
 
