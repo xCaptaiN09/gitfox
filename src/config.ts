@@ -83,6 +83,10 @@ export function loadConfig(): GitfoxConfig {
     ollamaUrl: ollamaUrl.replace(/\/+$/, ''),
     postSuggestions: parseBoolEnv('GITFOX_POST_SUGGESTIONS', true),
     searchFixed: parseBoolEnv('GITFOX_SEARCH_FIXED', true),
-    inlineComments: parseBoolEnv('GITFOX_INLINE_COMMENTS', true)
+    inlineComments: parseBoolEnv('GITFOX_INLINE_COMMENTS', true),
+    requestChanges: parseBoolEnv('GITFOX_REQUEST_CHANGES', false),
+    repoContext: parseBoolEnv('GITFOX_REPO_CONTEXT', true),
+    progressReactions: parseBoolEnv('GITFOX_PROGRESS_REACTIONS', true),
+    incrementalReview: parseBoolEnv('GITFOX_INCREMENTAL_REVIEW', true)
   };
 }

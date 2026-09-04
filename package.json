@@ -1,6 +1,6 @@
 {
   "name": "gitfox",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Private AI code review & issue triage GitHub Action powered by a local Ollama model",
   "main": "dist/index.js",
   "type": "commonjs",

@@ -1,6 +1,6 @@
 # 🦊 Gitfox
 
-![Release](https://img.shields.io/github/v/release/xCaptaiN09/gitfox) ![License](https://img.shields.io/github/license/xCaptaiN09/gitfox) ![Tests](https://img.shields.io/badge/tests-21%2F21-brightgreen)
+![Release](https://img.shields.io/github/v/release/xCaptaiN09/gitfox) ![License](https://img.shields.io/github/license/xCaptaiN09/gitfox) ![Tests](https://img.shields.io/badge/tests-35%2F35-brightgreen)
 
 **Private AI code review & issue triage for GitHub — powered by a local Ollama model.**
 
@@ -14,8 +14,12 @@ Your code never leaves the runner. No API keys. No cloud LLM. Free forever.
 - **Catch-up scan** — run once with `scan-all: true` to review all currently open PRs and issues
 - **Deduplication** — invisible comment markers ensure gitfox replies to each PR/issue only once
 - **Team rules** — a `.gitfox/rules.md` file in your repo defines project-specific standards that gitfox enforces
-- **Suggested fixes** — posts ready-to-apply GitHub suggestion blocks where possible
+- **Suggested fixes** — posts ready-to-apply GitHub suggestion blocks where possible, including multi-line ranges
 - **Prior fix detection** — searches closed PRs/issues for related fixes and links them
+- **Blocking reviews (v1.2)** — opt in with `request-changes: true` and critical 🔴 findings formally block the merge
+- **Repo context (v1.2)** — gitfox reads the repo file tree plus related source files to catch cross-file issues
+- **Progress reactions (v1.2)** — 🚀 on the PR/issue while reviewing, 👍 when done
+- **Incremental re-review (v1.2)** — new pushes re-analyze only the commits since the last reviewed SHA
 
 ## Quick start
 
@@ -72,7 +76,12 @@ gitfox will scan all open PRs and issues and reply to any it has not already han
 | `max-scan-items`   | `10`                  | Safety cap for scan runs                                 |
 | `max-comments`     | `10`                  | Maximum findings posted per PR                           |
 | `post-suggestions` | `true`                | Include apply-ready suggestion blocks                    |
+| `inline-comments`  | `true`                | Post findings inline on the exact changed lines          |
 | `search-fixed`     | `true`                | Link to closed PRs/issues that may already fix a problem |
+| `request-changes`  | `false`               | Submit REQUEST_CHANGES reviews when critical findings exist (blocks merge) |
+| `repo-context`     | `true`                | Include repo file tree + related files in the review prompt |
+| `progress-reactions` | `true`              | React 🚀 while reviewing and 👍 when done                |
+| `incremental-review` | `true`              | On new pushes, review only changes since the last reviewed commit |
 
 ## Team rules
 
@@ -111,6 +120,7 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.2.0** | 2026-09-04 | `request-changes` mode blocks merges on critical findings, repo-context prompts (file tree + related source files), multi-line suggestions, 🚀/👍 progress reactions, incremental re-review of only new commits |
 | **v1.1.2** | 2026-09-04 | Retry once on malformed model output, then skip gracefully — model hiccups no longer fail the workflow. Summary-table counts fixed; dedup now also checks posted reviews, not just comments |
 | **v1.1.0** | 2026-09-02 | Re-review on every new PR commit, `/gitfox` comment command, inline review comments on exact lines, summary table with verdict |
 | **v1.0.0** | 2026-09-02 | First release: PR review, issue triage, catch-up scan, dedup, team rules, suggested fixes |

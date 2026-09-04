@@ -7,12 +7,16 @@ export const REVIEW_JSON_CONTRACT = `{
     {
       "severity": "critical | warning | suggestion",
       "file": "path/relative/to/repo.ext",
+      "start_line": 40,
       "line": 42,
       "comment": "what is wrong and why it matters",
-      "suggestion": "optional: complete replacement code for the offending lines"
+      "suggestion": "optional: complete replacement code for the offending lines (from start_line through line)"
     }
   ]
-}`;
+}
+
+Use "start_line" together with "line" ONLY when the problem spans a range of lines
+(start_line is the first affected line, line is the last). Otherwise omit "start_line".`;
 
 export const TRIAGE_JSON_CONTRACT = `{
   "labels": ["bug", "question"],
@@ -23,11 +27,19 @@ const SEVERITY_RULES = `- "critical": bugs, security vulnerabilities, data loss,
 - "warning": likely problems, edge cases, performance issues, bad practices
 - "suggestion": style, readability, minor improvements`;
 
-export function buildReviewMessages(pr: PullRequestContext, rulesContent: string, diffText: string): { system: string; user: string } {
+export function buildReviewMessages(
+  pr: PullRequestContext,
+  rulesContent: string,
+  diffText: string,
+  repoContext: string = ''
+): { system: string; user: string } {
   const system = [
     'You are gitfox, a precise senior code reviewer running fully locally.',
     'You review pull request diffs and report ONLY real, concrete problems you can point to in the diff.',
     'Never invent files or lines that are not in the diff. Never comment on code that was not changed.',
+    repoContext === ''
+      ? ''
+      : 'Repository context (file tree and related source files) is provided below the diff. Use it to understand conventions, callers, and cross-file impact — but still report findings only against changed lines in the diff.',
     'Reply with valid JSON only, no markdown fences, matching exactly this shape:',
     REVIEW_JSON_CONTRACT,
     'Severity rules:',
@@ -41,7 +53,8 @@ export function buildReviewMessages(pr: PullRequestContext, rulesContent: string
     `Author: ${pr.author}`,
     pr.body.trim() === '' ? '' : `Description:\n${pr.body.slice(0, 3000)}`,
     'Diff to review:',
-    diffText
+    diffText,
+    repoContext === '' ? '' : `\nRepository context:\n${repoContext}`
   ].filter((part) => part !== '').join('\n\n');
 
   return { system, user };

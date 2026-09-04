@@ -1,6 +1,6 @@
 import { getOctokit } from '@actions/github';
 import { GitHubApiError } from './errors';
-import { hasAnyMarker, hasMarker, markerFor } from './markers';
+import { hasAnyMarker, hasMarker, markerFor, parseReviewedSha } from './markers';
 import type { IssueContext, PullRequestContext } from './types';
 
 const PR_KIND = 'pr-review';
@@ -16,6 +16,37 @@ export interface PriorFixResult {
   number: number;
   title: string;
   url: string;
+}
+
+export type ReviewEvent = 'COMMENT' | 'REQUEST_CHANGES' | 'APPROVE';
+
+export interface ReviewCommentPayload {
+  path: string;
+  line: number;
+  side: 'RIGHT';
+  start_line?: number;
+  start_side?: 'RIGHT';
+  body: string;
+}
+
+export function buildReviewPayload(
+  body: string,
+  comments: Array<{ path: string; line: number; startLine?: number; body: string }>,
+  event: ReviewEvent
+): { event: ReviewEvent; body: string; comments: ReviewCommentPayload[] } {
+  return {
+    event,
+    body,
+    comments: comments.map((comment) => ({
+      path: comment.path,
+      line: comment.line,
+      side: 'RIGHT' as const,
+      ...(comment.startLine !== undefined && comment.startLine < comment.line
+        ? { start_line: comment.startLine, start_side: 'RIGHT' as const }
+        : {}),
+      body: comment.body
+    }))
+  };
 }
 
 export class GitHubClient {
@@ -61,6 +92,8 @@ export class GitHubClient {
         body: pr.body ?? '',
         author: pr.user?.login ?? 'unknown',
         headSha: pr.head?.sha ?? '',
+        baseSha: pr.base?.sha ?? '',
+        baseRef: pr.base?.ref ?? '',
         diff,
         files: []
       };
@@ -171,6 +204,133 @@ export class GitHubClient {
       });
     } catch (error) {
       throw this.wrap(error, `adding labels to #${number}`);
+    }
+  }
+
+  public async getFileTree(ref: RepoRef, sha: string, maxEntries: number = 3000): Promise<string[]> {
+    if (sha === '') {
+      return [];
+    }
+    try {
+      const { data } = await this.octokit.rest.git.getTree({
+        owner: ref.owner,
+        repo: ref.repo,
+        tree_sha: sha,
+        recursive: 'true'
+      });
+      const paths: string[] = [];
+      for (const entry of data.tree) {
+        if (entry.type === 'blob' && typeof entry.path === 'string' && paths.length < maxEntries) {
+          paths.push(entry.path);
+        }
+      }
+      return paths;
+    } catch (error) {
+      throw this.wrap(error, `fetching file tree at ${sha.slice(0, 7)}`);
+    }
+  }
+
+  public async getFileContent(ref: RepoRef, sha: string, path: string, maxBytes: number = 100000): Promise<string | null> {
+    try {
+      const { data } = await this.octokit.rest.repos.getContent({
+        owner: ref.owner,
+        repo: ref.repo,
+        path,
+        ref: sha
+      });
+      if (Array.isArray(data) || data.type !== 'file' || typeof data.content !== 'string') {
+        return null;
+      }
+      if (data.size !== undefined && data.size > maxBytes) {
+        return null;
+      }
+      return Buffer.from(data.content, 'base64').toString('utf8');
+    } catch (error) {
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: unknown }).status
+        : undefined;
+      if (status === 404 || status === 403) {
+        return null;
+      }
+      throw this.wrap(error, `fetching content of ${path}`);
+    }
+  }
+
+  public async addReaction(ref: RepoRef, number: number, content: 'rocket' | '+1' | 'eyes'): Promise<boolean> {
+    try {
+      await this.octokit.rest.reactions.createForIssue({
+        owner: ref.owner,
+        repo: ref.repo,
+        issue_number: number,
+        content
+      });
+      return true;
+    } catch (error) {
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: unknown }).status
+        : undefined;
+      if (status === 409 || status === 422) {
+        return false;
+      }
+      throw this.wrap(error, `adding ${content} reaction on #${number}`);
+    }
+  }
+
+  public async compareDiff(ref: RepoRef, base: string, head: string, maxChars: number = 60000): Promise<string> {
+    if (base === '' || head === '' || base === head) {
+      return '';
+    }
+    try {
+      const { data } = await this.octokit.rest.repos.compareCommits({
+        owner: ref.owner,
+        repo: ref.repo,
+        base,
+        head
+      });
+      const parts: string[] = [];
+      let total = 0;
+      for (const file of data.files ?? []) {
+        const section = `diff --git a/${file.filename} b/${file.filename}\n${file.patch ?? '[binary or no patch]'}`;
+        if (total + section.length > maxChars) {
+          break;
+        }
+        parts.push(section);
+        total += section.length;
+      }
+      return parts.join('\n');
+    } catch (error) {
+      throw this.wrap(error, `comparing ${base.slice(0, 7)}...${head.slice(0, 7)}`);
+    }
+  }
+
+  public async getLastReviewedSha(ref: RepoRef, number: number): Promise<string | undefined> {
+    const bodies = await this.listReviewBodies(ref, number).catch(() => []);
+    return parseReviewedSha(bodies, number);
+  }
+
+  public async createReview(
+    ref: RepoRef,
+    number: number,
+    body: string,
+    comments: Array<{ path: string; line: number; startLine?: number; body: string }>,
+    event: ReviewEvent = 'COMMENT'
+  ): Promise<boolean> {
+    try {
+      await this.octokit.rest.pulls.createReview({
+        owner: ref.owner,
+        repo: ref.repo,
+        pull_number: number,
+        ...buildReviewPayload(body, comments, event)
+      });
+      return true;
+    } catch (error) {
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: unknown }).status
+        : undefined;
+      if (status === 422 || status === 400 || status === 404) {
+        return false;
+      }
+      throw this.wrap(error, `posting review on #${number}`);
     }
   }
 

@@ -11,6 +11,7 @@ interface RawFinding {
   severity?: unknown;
   file?: unknown;
   line?: unknown;
+  start_line?: unknown;
   comment?: unknown;
   suggestion?: unknown;
 }
@@ -42,6 +43,10 @@ export function normalizeFindings(raw: unknown, maxComments: number): Finding[] 
     const line = typeof candidate.line === 'number' && Number.isInteger(candidate.line) && candidate.line > 0
       ? candidate.line
       : undefined;
+    const rawStart = typeof candidate.start_line === 'number' && Number.isInteger(candidate.start_line) && candidate.start_line > 0
+      ? candidate.start_line
+      : undefined;
+    const startLine = rawStart !== undefined && line !== undefined && rawStart < line ? rawStart : undefined;
     const suggestion = typeof candidate.suggestion === 'string' && candidate.suggestion.trim() !== ''
       ? candidate.suggestion.trim()
       : undefined;
@@ -49,6 +54,7 @@ export function normalizeFindings(raw: unknown, maxComments: number): Finding[] 
       severity,
       file: candidate.file.trim(),
       line,
+      startLine,
       comment: candidate.comment.trim(),
       suggestion
     });
@@ -56,16 +62,24 @@ export function normalizeFindings(raw: unknown, maxComments: number): Finding[] 
   return findings.slice(0, maxComments);
 }
 
+export interface ReviewOptions {
+  diffTextOverride?: string;
+  repoContext?: string;
+}
+
 export async function reviewPullRequest(
   ollama: OllamaClient,
   pr: PullRequestContext,
   rulesContent: string,
-  maxComments: number
+  maxComments: number,
+  options: ReviewOptions = {}
 ): Promise<ReviewResult> {
   const files = parseDiff(pr.diff);
   pr.files = files;
-  const diffText = formatDiffForPrompt(files);
-  const { system, user } = buildReviewMessages(pr, rulesContent, diffText);
+  const diffText = options.diffTextOverride !== undefined && options.diffTextOverride !== ''
+    ? formatDiffForPrompt(parseDiff(options.diffTextOverride))
+    : formatDiffForPrompt(files);
+  const { system, user } = buildReviewMessages(pr, rulesContent, diffText, options.repoContext ?? '');
 
   const content = await ollama.chat(
     [
@@ -98,7 +112,8 @@ export function renderReviewComment(
   postSuggestions: boolean,
   commitSha?: string,
   inlineCount?: number,
-  totalFindings?: Finding[]
+  totalFindings?: Finding[],
+  reviewEvent: 'COMMENT' | 'REQUEST_CHANGES' = 'COMMENT'
 ): string {
   const all = totalFindings ?? result.findings;
   const critical = all.filter((f) => f.severity === 'critical').length;
@@ -121,6 +136,20 @@ export function renderReviewComment(
 
   sections.push(result.summary === '' ? '*(no summary returned)*' : result.summary);
 
+  if (reviewEvent === 'REQUEST_CHANGES') {
+    sections.push('🚫 **gitfox requested changes** — this PR has critical findings and merge is formally blocked until they are resolved.');
+  }
+
+  const locationFor = (finding: Finding): string => {
+    if (finding.line === undefined) {
+      return finding.file;
+    }
+    if (finding.startLine !== undefined && finding.startLine < finding.line) {
+      return `${finding.file}:${finding.startLine}-${finding.line}`;
+    }
+    return `${finding.file}:${finding.line}`;
+  };
+
   if (inlineCount !== undefined && inlineCount > 0) {
     sections.push(`📍 ${inlineCount} finding(s) posted inline on the changed lines.`);
   }
@@ -132,8 +161,7 @@ export function renderReviewComment(
   } else {
     sections.push('### Findings');
     for (const finding of result.findings) {
-      const location = finding.line === undefined ? finding.file : `${finding.file}:${finding.line}`;
-      sections.push(`#### ${SEVERITY_EMOJI[finding.severity]} \`${location}\``);
+      sections.push(`#### ${SEVERITY_EMOJI[finding.severity]} \`${locationFor(finding)}\``);
       sections.push(finding.comment);
       if (postSuggestions && finding.suggestion !== undefined) {
         sections.push('```suggestion\n' + finding.suggestion + '\n```');

@@ -49,6 +49,22 @@ inputs:
     description: "Search closed PRs/issues for prior fixes and reference them"
     required: false
     default: "true"
+  request-changes:
+    description: "If true, submit REQUEST_CHANGES reviews when critical findings exist (blocks merge)"
+    required: false
+    default: "false"
+  repo-context:
+    description: "Include repository file tree and related files in the review prompt for better context"
+    required: false
+    default: "true"
+  progress-reactions:
+    description: "React 🚀 on the PR/issue while reviewing and 👍 when done"
+    required: false
+    default: "true"
+  incremental-review:
+    description: "On new PR pushes, review only the changes since the last reviewed commit when possible"
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
@@ -102,4 +118,8 @@ runs:
         GITFOX_POST_SUGGESTIONS: ${{ inputs.post-suggestions }}
         GITFOX_SEARCH_FIXED: ${{ inputs.search-fixed }}
         GITFOX_INLINE_COMMENTS: ${{ inputs.inline-comments }}
+        GITFOX_REQUEST_CHANGES: ${{ inputs.request-changes }}
+        GITFOX_REPO_CONTEXT: ${{ inputs.repo-context }}
+        GITFOX_PROGRESS_REACTIONS: ${{ inputs.progress-reactions }}
+        GITFOX_INCREMENTAL_REVIEW: ${{ inputs.incremental-review }}
       run: node "$GITHUB_ACTION_PATH/dist/index.js"

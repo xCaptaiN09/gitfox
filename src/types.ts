@@ -11,6 +11,8 @@ export interface PullRequestContext {
   body: string;
   author: string;
   headSha: string;
+  baseSha: string;
+  baseRef: string;
   diff: string;
   files: DiffFile[];
 }
@@ -27,6 +29,7 @@ export interface Finding {
   severity: Severity;
   file: string;
   line?: number;
+  startLine?: number;
   comment: string;
   suggestion?: string;
 }
@@ -59,4 +62,8 @@ export interface GitfoxConfig {
   postSuggestions: boolean;
   searchFixed: boolean;
   inlineComments: boolean;
+  requestChanges: boolean;
+  repoContext: boolean;
+  progressReactions: boolean;
+  incrementalReview: boolean;
 }
