@@ -76,16 +76,14 @@ runs:
     - name: Prepare cache directories
       shell: bash
       run: |
-        mkdir -p /usr/local/lib/ollama
+        mkdir -p "${{ runner.temp }}/ollama-bin"
         mkdir -p "${{ runner.temp }}/ollama-models"
 
     - name: Cache Ollama binary
       id: ollama-bin
       uses: actions/cache@v4
       with:
-        path: |
-          /usr/local/bin/ollama
-          /usr/local/lib/ollama
+        path: ${{ runner.temp }}/ollama-bin
         key: ollama-bin-linux-amd64-v1
 
     - name: Install action dependencies
@@ -98,9 +96,14 @@ runs:
       if: steps.ollama-bin.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        if ! command -v ollama >/dev/null 2>&1; then
-          curl -fsSL https://ollama.com/install.sh | sh
+        if [ ! -x "${{ runner.temp }}/ollama-bin/ollama" ]; then
+          curl -fsSL -o /tmp/ollama.tgz https://ollama.com/download/ollama-linux-amd64.tgz
+          tar -xzf /tmp/ollama.tgz -C "${{ runner.temp }}/ollama-bin"
         fi
+
+    - name: Put Ollama on PATH
+      shell: bash
+      run: echo "${{ runner.temp }}/ollama-bin" >> "$GITHUB_PATH"
 
     - name: Restore cached Ollama model
       id: ollama-model
