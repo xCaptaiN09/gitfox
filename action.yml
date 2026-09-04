@@ -96,14 +96,24 @@ runs:
       if: steps.ollama-bin.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        if [ ! -x "${{ runner.temp }}/ollama-bin/ollama" ]; then
-          curl -fsSL -o /tmp/ollama.tgz https://ollama.com/download/ollama-linux-amd64.tgz
-          tar -xzf /tmp/ollama.tgz -C "${{ runner.temp }}/ollama-bin"
+        BIN="${{ runner.temp }}/ollama-bin"
+        if [ ! -x "$BIN/bin/ollama" ]; then
+          if curl -fsSL -o /tmp/ollama.tar.zst https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst; then
+            if command -v zstd >/dev/null 2>&1; then
+              zstd -d -f /tmp/ollama.tar.zst -o /tmp/ollama.tar
+              tar -xf /tmp/ollama.tar -C "$BIN"
+            else
+              tar --zstd -xf /tmp/ollama.tar.zst -C "$BIN"
+            fi
+          else
+            echo "Tarball unavailable, falling back to official installer"
+            curl -fsSL https://ollama.com/install.sh | sudo sh
+          fi
         fi
 
     - name: Put Ollama on PATH
       shell: bash
-      run: echo "${{ runner.temp }}/ollama-bin" >> "$GITHUB_PATH"
+      run: echo "${{ runner.temp }}/ollama-bin/bin" >> "$GITHUB_PATH"
 
     - name: Restore cached Ollama model
       id: ollama-model
