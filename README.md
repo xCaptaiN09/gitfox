@@ -121,6 +121,7 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.2.1** | 2026-09-04 | Model caching (Ollama binary + model persisted between runs — no more 4.7GB download every run), npm dependency cache, deterministic single Ollama server, 45-min job timeout guard, `qwen2.5-coder:7b` standardized everywhere |
 | **v1.2.0** | 2026-09-04 | `request-changes` mode blocks merges on critical findings, repo-context prompts (file tree + related source files), multi-line suggestions, 🚀/👍 progress reactions, incremental re-review of only new commits |
 | **v1.1.2** | 2026-09-04 | Retry once on malformed model output, then skip gracefully — model hiccups no longer fail the workflow. Summary-table counts fixed; dedup now also checks posted reviews, not just comments |
 | **v1.1.0** | 2026-09-02 | Re-review on every new PR commit, `/gitfox` comment command, inline review comments on exact lines, summary table with verdict |
