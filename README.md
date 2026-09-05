@@ -156,6 +156,7 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.3.1** | 2026-09-05 | Marketplace-ready metadata: action name `gitfox-ai`, description under 125 chars (no code changes) |
 | **v1.3.0** | 2026-09-04 | GitHub App identity: pass `app-id` + `private-key` and every reply posts as your app bot (`gitfox[bot]`) with its avatar — token still works as before |
 | **v1.2.2** | 2026-09-04 | Action hardening verified in live end-to-end runs: sudo-free Ollama install into the runner temp dir, correct tarball URL (`.tar.zst`) with zstd extract + installer fallback, no workspace-scoped caches, Node 22, binary+model caching |
 | **v1.2.1** | 2026-09-04 | Model caching (Ollama binary + model persisted between runs — no more 4.7GB download every run), npm dependency cache, deterministic single Ollama server, 45-min job timeout guard, `qwen2.5-coder:7b` standardized everywhere |

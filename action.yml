@@ -1,7 +1,7 @@
-name: "gitfox"
+name: "gitfox-ai"
 description: >-
-  Private AI code review & issue triage powered by a local Ollama model.
-  No API keys, no cloud LLM — your code never leaves the runner.
+  Private AI code review & issue triage on GitHub Actions — powered by a
+  local Ollama model. No API keys, no cloud LLM.
 author: "xCaptaiN09"
 
 branding:
