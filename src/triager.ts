@@ -34,9 +34,10 @@ export function normalizeLabels(raw: unknown): string[] {
 export async function triageIssue(
   ollama: OllamaClient,
   issue: IssueContext,
-  rulesContent: string
+  rulesContent: string,
+  repoContext: string = ''
 ): Promise<TriageResult> {
-  const { system, user } = buildTriageMessages(issue, rulesContent);
+  const { system, user } = buildTriageMessages(issue, rulesContent, repoContext);
 
   const content = await ollama.chat(
     [

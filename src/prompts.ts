@@ -60,7 +60,11 @@ export function buildReviewMessages(
   return { system, user };
 }
 
-export function buildTriageMessages(issue: IssueContext, rulesContent: string): { system: string; user: string } {
+export function buildTriageMessages(
+  issue: IssueContext,
+  rulesContent: string,
+  repoContext: string = ''
+): { system: string; user: string } {
   const system = [
     'You are gitfox, an issue triage assistant running fully locally.',
     'You read GitHub issues and classify them.',
@@ -68,6 +72,7 @@ export function buildTriageMessages(issue: IssueContext, rulesContent: string): 
     TRIAGE_JSON_CONTRACT,
     'Allowed labels (use only these): bug, enhancement, question, documentation, duplicate, invalid, wontfix, "good first issue", "help wanted".',
     'Choose 1 to 3 labels. Write a short, kind, useful comment (max 120 words).',
+    'When repository context is provided, use it to give accurate, file-aware answers — never guess about the codebase.',
     rulesContent === '' ? '' : `\nThe team has extra triage rules you MUST follow:\n${rulesContent}`
   ].filter((part) => part !== '').join('\n');
 
@@ -75,7 +80,8 @@ export function buildTriageMessages(issue: IssueContext, rulesContent: string): 
     `Issue #${issue.number}: ${issue.title}`,
     `Author: ${issue.author}`,
     issue.body.trim() === '' ? '' : `Body:\n${issue.body.slice(0, 4000)}`,
-    issue.labels.length > 0 ? `Existing labels: ${issue.labels.join(', ')}` : ''
+    issue.labels.length > 0 ? `Existing labels: ${issue.labels.join(', ')}` : '',
+    repoContext === '' ? '' : `\nRepository context:\n${repoContext}`
   ].filter((part) => part !== '').join('\n\n');
 
   return { system, user };

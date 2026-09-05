@@ -256,6 +256,45 @@ export class GitHubClient {
     }
   }
 
+  public async getReadme(ref: RepoRef, maxChars: number = 6000): Promise<string> {
+    try {
+      const { data } = await this.octokit.rest.repos.getReadme({
+        owner: ref.owner,
+        repo: ref.repo
+      });
+      if (typeof data.content !== 'string') {
+        return '';
+      }
+      return Buffer.from(data.content, 'base64').toString('utf8').slice(0, maxChars);
+    } catch (error) {
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: unknown }).status
+        : undefined;
+      if (status === 404 || status === 403) {
+        return '';
+      }
+      throw this.wrap(error, 'fetching repository README');
+    }
+  }
+
+  public async getDefaultBranchSha(ref: RepoRef): Promise<string> {
+    try {
+      const { data } = await this.octokit.rest.repos.get({
+        owner: ref.owner,
+        repo: ref.repo
+      });
+      const branch = data.default_branch ?? 'main';
+      const { data: branchData } = await this.octokit.rest.repos.getBranch({
+        owner: ref.owner,
+        repo: ref.repo,
+        branch
+      });
+      return branchData.commit.sha;
+    } catch (error) {
+      throw this.wrap(error, 'fetching default branch head');
+    }
+  }
+
   public async addReaction(ref: RepoRef, number: number, content: 'rocket' | '+1' | 'eyes'): Promise<boolean> {
     try {
       await this.octokit.rest.reactions.createForIssue({
@@ -403,6 +442,15 @@ export class GitHubClient {
   public async alreadyRepliedToIssue(ref: RepoRef, number: number): Promise<boolean> {
     const bodies = await this.listCommentBodies(ref, number);
     return hasMarker(bodies, ISSUE_KIND, number);
+  }
+
+  public async hasAnyGitfoxReply(ref: RepoRef, number: number): Promise<boolean> {
+    const [comments, reviews] = await Promise.all([
+      this.listCommentBodies(ref, number),
+      this.listReviewBodies(ref, number).catch(() => [])
+    ]);
+    const bodies = [...comments, ...reviews];
+    return hasAnyMarker(bodies, PR_KIND, number) || hasAnyMarker(bodies, ISSUE_KIND, number);
   }
 
   public prMarker(number: number, headSha?: string): string {

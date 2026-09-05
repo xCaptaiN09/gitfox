@@ -30485,6 +30485,45 @@ class GitHubClient {
             throw this.wrap(error, `fetching content of ${path}`);
         }
     }
+    async getReadme(ref, maxChars = 6000) {
+        try {
+            const { data } = await this.octokit.rest.repos.getReadme({
+                owner: ref.owner,
+                repo: ref.repo
+            });
+            if (typeof data.content !== 'string') {
+                return '';
+            }
+            return Buffer.from(data.content, 'base64').toString('utf8').slice(0, maxChars);
+        }
+        catch (error) {
+            const status = typeof error === 'object' && error !== null && 'status' in error
+                ? error.status
+                : undefined;
+            if (status === 404 || status === 403) {
+                return '';
+            }
+            throw this.wrap(error, 'fetching repository README');
+        }
+    }
+    async getDefaultBranchSha(ref) {
+        try {
+            const { data } = await this.octokit.rest.repos.get({
+                owner: ref.owner,
+                repo: ref.repo
+            });
+            const branch = data.default_branch ?? 'main';
+            const { data: branchData } = await this.octokit.rest.repos.getBranch({
+                owner: ref.owner,
+                repo: ref.repo,
+                branch
+            });
+            return branchData.commit.sha;
+        }
+        catch (error) {
+            throw this.wrap(error, 'fetching default branch head');
+        }
+    }
     async addReaction(ref, number, content) {
         try {
             await this.octokit.rest.reactions.createForIssue({
@@ -30618,6 +30657,14 @@ class GitHubClient {
     async alreadyRepliedToIssue(ref, number) {
         const bodies = await this.listCommentBodies(ref, number);
         return (0, markers_1.hasMarker)(bodies, ISSUE_KIND, number);
+    }
+    async hasAnyGitfoxReply(ref, number) {
+        const [comments, reviews] = await Promise.all([
+            this.listCommentBodies(ref, number),
+            this.listReviewBodies(ref, number).catch(() => [])
+        ]);
+        const bodies = [...comments, ...reviews];
+        return (0, markers_1.hasAnyMarker)(bodies, PR_KIND, number) || (0, markers_1.hasAnyMarker)(bodies, ISSUE_KIND, number);
     }
     prMarker(number, headSha) {
         return (0, markers_1.markerFor)(PR_KIND, number, headSha);
@@ -30772,9 +30819,21 @@ async function runScanAll(config) {
     const github = await resolveGitHub(config);
     const ollama = new ollama_client_1.OllamaClient(config.ollamaUrl, config.model);
     const ref = repoRef();
-    core.info('gitfox: scan-all mode — checking all open PRs and issues');
+    const first = await (0, scanner_1.isFirstRun)(github, ref).catch(() => false);
+    core.info(first
+        ? `gitfox: first setup detected — catching up on all open PRs and issues, one by one (cap: ${config.maxScanItems})`
+        : `gitfox: scan-all mode — checking all open PRs and issues (cap: ${config.maxScanItems})`);
     const stats = await (0, scanner_1.scanRepository)(github, ollama, config, ref);
     core.info(`gitfox scan complete: ${stats.prsReviewed} PRs reviewed, ${stats.prsSkipped} skipped, ` +
+        `${stats.issuesTriaged} issues triaged, ${stats.issuesSkipped} skipped, ${stats.failed} failed`);
+}
+async function maybeCatchUpScan(github, ollama, config, ref, firstRun) {
+    if (!firstRun) {
+        return;
+    }
+    core.info('gitfox: first setup detected — running a one-time catch-up scan over all open PRs and issues');
+    const stats = await (0, scanner_1.scanRepository)(github, ollama, config, ref);
+    core.info(`gitfox catch-up complete: ${stats.prsReviewed} PRs reviewed, ${stats.prsSkipped} skipped, ` +
         `${stats.issuesTriaged} issues triaged, ${stats.issuesSkipped} skipped, ${stats.failed} failed`);
 }
 async function runPullRequest(config) {
@@ -30795,10 +30854,12 @@ async function runPullRequest(config) {
         core.info(`gitfox: already reviewed PR #${payload.number} at commit ${headSha?.slice(0, 7) ?? 'unknown'}, skipping`);
         return;
     }
+    const firstRun = await (0, scanner_1.isFirstRun)(github, ref).catch(() => false);
     const pr = await github.getPullRequest(ref, payload.number);
     core.info(`gitfox: reviewing PR #${pr.number} — ${pr.title}`);
     await (0, scanner_1.reviewAndPost)(github, ollama, config, ref, pr, headSha);
     core.info('gitfox: review posted');
+    await maybeCatchUpScan(github, ollama, config, ref, firstRun);
 }
 async function runIssue(config) {
     const payload = github_1.context.payload.issue;
@@ -30817,10 +30878,12 @@ async function runIssue(config) {
         core.info(`gitfox: already triaged issue #${payload.number}, skipping`);
         return;
     }
+    const firstRun = await (0, scanner_1.isFirstRun)(github, ref).catch(() => false);
     const issue = await github.getIssue(ref, payload.number);
     core.info(`gitfox: triaging issue #${issue.number} — ${issue.title}`);
     await (0, scanner_1.triageAndPost)(github, ollama, config, ref, issue);
     core.info('gitfox: triage posted');
+    await maybeCatchUpScan(github, ollama, config, ref, firstRun);
 }
 async function run() {
     const config = (0, config_1.loadConfig)();
@@ -30838,6 +30901,10 @@ async function run() {
                 break;
             case 'issue_comment':
                 await runCommentCommand(config);
+                break;
+            case 'workflow_dispatch':
+            case 'schedule':
+                await runScanAll(config);
                 break;
             default:
                 core.info(`gitfox: unsupported event "${github_1.context.eventName}", nothing to do`);
@@ -31050,7 +31117,7 @@ function buildReviewMessages(pr, rulesContent, diffText, repoContext = '') {
     ].filter((part) => part !== '').join('\n\n');
     return { system, user };
 }
-function buildTriageMessages(issue, rulesContent) {
+function buildTriageMessages(issue, rulesContent, repoContext = '') {
     const system = [
         'You are gitfox, an issue triage assistant running fully locally.',
         'You read GitHub issues and classify them.',
@@ -31058,13 +31125,15 @@ function buildTriageMessages(issue, rulesContent) {
         exports.TRIAGE_JSON_CONTRACT,
         'Allowed labels (use only these): bug, enhancement, question, documentation, duplicate, invalid, wontfix, "good first issue", "help wanted".',
         'Choose 1 to 3 labels. Write a short, kind, useful comment (max 120 words).',
+        'When repository context is provided, use it to give accurate, file-aware answers — never guess about the codebase.',
         rulesContent === '' ? '' : `\nThe team has extra triage rules you MUST follow:\n${rulesContent}`
     ].filter((part) => part !== '').join('\n');
     const user = [
         `Issue #${issue.number}: ${issue.title}`,
         `Author: ${issue.author}`,
         issue.body.trim() === '' ? '' : `Body:\n${issue.body.slice(0, 4000)}`,
-        issue.labels.length > 0 ? `Existing labels: ${issue.labels.join(', ')}` : ''
+        issue.labels.length > 0 ? `Existing labels: ${issue.labels.join(', ')}` : '',
+        repoContext === '' ? '' : `\nRepository context:\n${repoContext}`
     ].filter((part) => part !== '').join('\n\n');
     return { system, user };
 }
@@ -31238,6 +31307,9 @@ function renderReviewComment(pr, result, priorFixes, marker, postSuggestions, co
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.buildIssueContextBase = buildIssueContextBase;
+exports.buildIssueRepoContext = buildIssueRepoContext;
+exports.isFirstRun = isFirstRun;
 exports.scanRepository = scanRepository;
 exports.formatFileTree = formatFileTree;
 exports.relatedSourceFiles = relatedSourceFiles;
@@ -31253,6 +31325,83 @@ const reviewer_1 = __nccwpck_require__(532);
 const triager_1 = __nccwpck_require__(8057);
 const REPO_CONTEXT_MAX_RELATED = 4;
 const REPO_CONTEXT_FILE_BUDGET = 24000;
+const ISSUE_CONTEXT_TREE_LIMIT = 300;
+const ISSUE_CONTEXT_FILE_BUDGET = 18000;
+const ISSUE_CONTEXT_README_LIMIT = 4000;
+async function buildIssueContextBase(github, ref, headSha) {
+    const sha = headSha ?? (await github.getDefaultBranchSha(ref).catch(() => ''));
+    if (sha === '') {
+        return { readme: '', tree: [], headSha: '' };
+    }
+    const [readme, tree] = await Promise.all([
+        github.getReadme(ref).catch(() => ''),
+        github.getFileTree(ref, sha, ISSUE_CONTEXT_TREE_LIMIT).catch(() => [])
+    ]);
+    return { readme, tree, headSha: sha };
+}
+async function buildIssueRepoContext(github, ref, issue, base) {
+    if (base.headSha === '' || base.tree.length === 0) {
+        return '';
+    }
+    const keywords = (0, keywords_1.extractKeywords)(issue.title).map((word) => word.toLowerCase());
+    const scored = [];
+    for (const path of base.tree) {
+        if (!/\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|rb|php|c|cc|cpp|h|hpp|cs|swift|kt|sh|vue|svelte|md)$/.test(path)) {
+            continue;
+        }
+        const lowerPath = path.toLowerCase();
+        let score = 0;
+        for (const keyword of keywords) {
+            if (keyword.length >= 4 && lowerPath.includes(keyword)) {
+                score += 3;
+            }
+        }
+        if (/^(src|lib|app)/.test(path)) {
+            score += 1;
+        }
+        if (score > 0) {
+            scored.push({ path, score });
+        }
+    }
+    const related = scored
+        .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+        .slice(0, REPO_CONTEXT_MAX_RELATED)
+        .map((entry) => entry.path);
+    const sections = [];
+    if (base.readme !== '') {
+        sections.push(`<repository_readme>\n${base.readme}\n</repository_readme>`);
+    }
+    sections.push(`<repo_tree total_files="${base.tree.length}">\n${base.tree.join('\n')}\n</repo_tree>`);
+    let budget = ISSUE_CONTEXT_FILE_BUDGET;
+    for (const path of related) {
+        if (budget <= 0) {
+            break;
+        }
+        const content = await github.getFileContent(ref, base.headSha, path).catch(() => null);
+        if (content === null) {
+            continue;
+        }
+        const clipped = content.slice(0, budget);
+        budget -= clipped.length;
+        sections.push(`<file path="${path}">\n${clipped}\n</file>`);
+    }
+    return sections.join('\n\n');
+}
+async function isFirstRun(github, ref) {
+    const prNumbers = await github.listOpenPullRequests(ref).catch(() => []);
+    for (const number of prNumbers) {
+        if (await github.hasAnyGitfoxReply(ref, number)) {
+            return false;
+        }
+    }
+    const issueNumbers = await github.listOpenIssues(ref).catch(() => []);
+    for (const number of issueNumbers) {
+        if (await github.hasAnyGitfoxReply(ref, number)) {
+            return false;
+        }
+    }
+    return true;
+}
 async function scanRepository(github, ollama, config, ref) {
     const stats = {
         prsReviewed: 0,
@@ -31473,16 +31622,21 @@ async function triageAndPost(github, ollama, config, ref, issue) {
     if (config.progressReactions) {
         await github.addReaction(ref, issue.number, 'rocket').catch(() => undefined);
     }
+    let issueContext = '';
+    if (config.repoContext) {
+        const base = await buildIssueContextBase(github, ref).catch(() => ({ readme: '', tree: [], headSha: '' }));
+        issueContext = await buildIssueRepoContext(github, ref, issue, base).catch(() => '');
+    }
     let result;
     try {
-        result = await (0, triager_1.triageIssue)(ollama, issue, config.rulesContent);
+        result = await (0, triager_1.triageIssue)(ollama, issue, config.rulesContent, issueContext);
     }
     catch (error) {
         if (!(error instanceof errors_1.ModelResponseError)) {
             throw error;
         }
         console.warn('gitfox: model returned malformed output for issue triage, retrying once');
-        result = await (0, triager_1.triageIssue)(ollama, issue, config.rulesContent);
+        result = await (0, triager_1.triageIssue)(ollama, issue, config.rulesContent, issueContext);
     }
     let priorFixes = [];
     if (config.searchFixed) {
@@ -31534,8 +31688,8 @@ function normalizeLabels(raw) {
         .filter((label) => ALLOWED_LABELS.has(label));
     return [...new Set(labels)].slice(0, 3);
 }
-async function triageIssue(ollama, issue, rulesContent) {
-    const { system, user } = (0, prompts_1.buildTriageMessages)(issue, rulesContent);
+async function triageIssue(ollama, issue, rulesContent, repoContext = '') {
+    const { system, user } = (0, prompts_1.buildTriageMessages)(issue, rulesContent, repoContext);
     const content = await ollama.chat([
         { role: 'system', content: system },
         { role: 'user', content: user }

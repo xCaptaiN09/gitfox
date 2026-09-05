@@ -9,6 +9,9 @@ import type { Finding, GitfoxConfig, IssueContext, PullRequestContext, ReviewRes
 
 const REPO_CONTEXT_MAX_RELATED = 4;
 const REPO_CONTEXT_FILE_BUDGET = 24000;
+const ISSUE_CONTEXT_TREE_LIMIT = 300;
+const ISSUE_CONTEXT_FILE_BUDGET = 18000;
+const ISSUE_CONTEXT_README_LIMIT = 4000;
 
 export interface ScanStats {
   prsReviewed: number;
@@ -21,6 +24,106 @@ export interface ScanStats {
 interface RepoRef {
   owner: string;
   repo: string;
+}
+
+export interface IssueContextBase {
+  readme: string;
+  tree: string[];
+  headSha: string;
+}
+
+export async function buildIssueContextBase(
+  github: GitHubClient,
+  ref: RepoRef,
+  headSha?: string
+): Promise<IssueContextBase> {
+  const sha = headSha ?? (await github.getDefaultBranchSha(ref).catch(() => ''));
+  if (sha === '') {
+    return { readme: '', tree: [], headSha: '' };
+  }
+  const [readme, tree] = await Promise.all([
+    github.getReadme(ref).catch(() => ''),
+    github.getFileTree(ref, sha, ISSUE_CONTEXT_TREE_LIMIT).catch(() => [])
+  ]);
+  return { readme, tree, headSha: sha };
+}
+
+export async function buildIssueRepoContext(
+  github: GitHubClient,
+  ref: RepoRef,
+  issue: IssueContext,
+  base: IssueContextBase
+): Promise<string> {
+  if (base.headSha === '' || base.tree.length === 0) {
+    return '';
+  }
+
+  const keywords = extractKeywords(issue.title).map((word) => word.toLowerCase());
+  const scored: Array<{ path: string; score: number }> = [];
+  for (const path of base.tree) {
+    if (!/\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|rb|php|c|cc|cpp|h|hpp|cs|swift|kt|sh|vue|svelte|md)$/.test(path)) {
+      continue;
+    }
+    const lowerPath = path.toLowerCase();
+    let score = 0;
+    for (const keyword of keywords) {
+      if (keyword.length >= 4 && lowerPath.includes(keyword)) {
+        score += 3;
+      }
+    }
+    if (/^(src|lib|app)/.test(path)) {
+      score += 1;
+    }
+    if (score > 0) {
+      scored.push({ path, score });
+    }
+  }
+
+  const related = scored
+    .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+    .slice(0, REPO_CONTEXT_MAX_RELATED)
+    .map((entry) => entry.path);
+
+  const sections: string[] = [];
+  if (base.readme !== '') {
+    sections.push(`<repository_readme>\n${base.readme}\n</repository_readme>`);
+  }
+  sections.push(`<repo_tree total_files="${base.tree.length}">\n${base.tree.join('\n')}\n</repo_tree>`);
+
+  let budget = ISSUE_CONTEXT_FILE_BUDGET;
+  for (const path of related) {
+    if (budget <= 0) {
+      break;
+    }
+    const content = await github.getFileContent(ref, base.headSha, path).catch(() => null);
+    if (content === null) {
+      continue;
+    }
+    const clipped = content.slice(0, budget);
+    budget -= clipped.length;
+    sections.push(`<file path="${path}">\n${clipped}\n</file>`);
+  }
+
+  return sections.join('\n\n');
+}
+
+export async function isFirstRun(
+  github: GitHubClient,
+  ref: RepoRef
+): Promise<boolean> {
+  const prNumbers = await github.listOpenPullRequests(ref).catch(() => []);
+  for (const number of prNumbers) {
+    if (await github.hasAnyGitfoxReply(ref, number)) {
+      return false;
+    }
+  }
+  const issueNumbers = await github.listOpenIssues(ref).catch(() => []);
+  for (const number of issueNumbers) {
+    if (await github.hasAnyGitfoxReply(ref, number)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export async function scanRepository(
@@ -309,15 +412,21 @@ export async function triageAndPost(
     await github.addReaction(ref, issue.number, 'rocket').catch(() => undefined);
   }
 
+  let issueContext = '';
+  if (config.repoContext) {
+    const base = await buildIssueContextBase(github, ref).catch(() => ({ readme: '', tree: [], headSha: '' }));
+    issueContext = await buildIssueRepoContext(github, ref, issue, base).catch(() => '');
+  }
+
   let result: Awaited<ReturnType<typeof triageIssue>>;
   try {
-    result = await triageIssue(ollama, issue, config.rulesContent);
+    result = await triageIssue(ollama, issue, config.rulesContent, issueContext);
   } catch (error) {
     if (!(error instanceof ModelResponseError)) {
       throw error;
     }
     console.warn('gitfox: model returned malformed output for issue triage, retrying once');
-    result = await triageIssue(ollama, issue, config.rulesContent);
+    result = await triageIssue(ollama, issue, config.rulesContent, issueContext);
   }
 
   let priorFixes: PriorFixResult[] = [];

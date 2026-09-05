@@ -15,7 +15,7 @@ Your code never leaves the runner. No API keys. No cloud LLM. Free forever.
 - **PR review** — detects bugs, security issues, and bad practices in pull request diffs, with severity labels:
   - 🔴 critical · 🟡 warning · 🟢 suggestion
 - **Issue triage** — auto-labels new issues (`bug`, `enhancement`, `question`, ...) and posts a helpful comment
-- **Catch-up scan** — run once with `scan-all: true` to review all currently open PRs and issues
+- **Catch-up scan (v1.4)** — on **first setup** (or via manual `workflow_dispatch`), gitfox automatically reviews all currently open PRs and issues one by one — no `scan-all` flag needed; safety-capped by `max-scan-items`
 - **Deduplication** — invisible comment markers ensure gitfox replies to each PR/issue only once
 - **Team rules** — a `.gitfox/rules.md` file in your repo defines project-specific standards that gitfox enforces
 - **Suggested fixes** — posts ready-to-apply GitHub suggestion blocks where possible, including multi-line ranges
@@ -67,8 +67,10 @@ Comment `/gitfox` or `@gitfox` on any PR or issue and gitfox will re-run its rev
 
 ### First launch on an existing repository
 
-Open the **Actions** tab, select **gitfox**, and run the workflow with `scan_all: true`.
-gitfox will scan all open PRs and issues and reply to any it has not already handled.
+Nothing to do — on its **first run in a repo** (no gitfox replies yet), gitfox automatically
+catches up: it reviews every currently open PR and triages every open issue, one by one
+(safety-capped by `max-scan-items`). You can also trigger this any time via a manual
+`workflow_dispatch` of the gitfox workflow.
 
 ## Inputs
 
@@ -156,6 +158,7 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.4.0** | 2026-09-05 | First-setup catch-up: new installs auto-scan all open PRs/issues one by one (also on any manual `workflow_dispatch`), repo context now powers issue triage too (README + file tree + related files) |
 | **v1.3.1** | 2026-09-05 | Marketplace-ready metadata: action name `gitfox-ai`, description under 125 chars (no code changes) |
 | **v1.3.0** | 2026-09-04 | GitHub App identity: pass `app-id` + `private-key` and every reply posts as your app bot (`gitfox[bot]`) with its avatar — token still works as before |
 | **v1.2.2** | 2026-09-04 | Action hardening verified in live end-to-end runs: sudo-free Ollama install into the runner temp dir, correct tarball URL (`.tar.zst`) with zstd extract + installer fallback, no workspace-scoped caches, Node 22, binary+model caching |
