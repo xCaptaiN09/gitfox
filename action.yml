@@ -17,6 +17,14 @@ inputs:
     description: "Ollama model to use for review/triage"
     required: false
     default: "qwen2.5-coder:7b"
+  app-id:
+    description: "GitHub App ID. When set together with private-key, gitfox authenticates as the App and replies appear as your app bot (e.g. gitfox[bot]) with its avatar"
+    required: false
+    default: ""
+  private-key:
+    description: "GitHub App private key in PEM format. Store it as a repository secret and reference it here"
+    required: false
+    default: ""
   rules-path:
     description: "Path (in the target repo) to a team rules markdown file"
     required: false
@@ -158,6 +166,8 @@ runs:
       shell: bash
       env:
         GITFOX_GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITFOX_APP_ID: ${{ inputs.app-id }}
+        GITFOX_APP_PRIVATE_KEY: ${{ inputs.private-key }}
         GITFOX_MODEL: ${{ inputs.model }}
         GITFOX_RULES_PATH: ${{ inputs.rules-path }}
         GITFOX_SCAN_ALL: ${{ inputs.scan-all }}

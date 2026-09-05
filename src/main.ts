@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import { context } from '@actions/github';
+import { createAppToken } from './app-auth';
 import { loadConfig } from './config';
 import { GitHubApiError, GitfoxError, ModelResponseError } from './errors';
 import { GitHubClient } from './github-client';
@@ -11,6 +12,15 @@ import type { GitfoxConfig } from './types';
 const SUPPORTED_PR_ACTIONS = new Set(['opened', 'synchronize', 'reopened']);
 const SUPPORTED_ISSUE_ACTIONS = new Set(['opened']);
 const COMMENT_ACTION = 'created';
+
+async function resolveGitHub(config: GitfoxConfig): Promise<GitHubClient> {
+  if (config.appId !== '' && config.privateKey !== '') {
+    const installationToken = await createAppToken(config.appId, config.privateKey, repoRef());
+    core.info('gitfox: authenticated as a GitHub App — replies will appear as gitfox[bot] with the app avatar');
+    return new GitHubClient(installationToken);
+  }
+  return new GitHubClient(config.token);
+}
 
 async function runCommentCommand(config: GitfoxConfig): Promise<void> {
   const payload = context.payload;
@@ -33,7 +43,7 @@ async function runCommentCommand(config: GitfoxConfig): Promise<void> {
     return;
   }
 
-  const github = new GitHubClient(config.token);
+  const github = await resolveGitHub(config);
   const ollama = new OllamaClient(config.ollamaUrl, config.model);
   const ref = repoRef();
 
@@ -60,7 +70,7 @@ function repoRef(): { owner: string; repo: string } {
 }
 
 async function runScanAll(config: GitfoxConfig): Promise<void> {
-  const github = new GitHubClient(config.token);
+  const github = await resolveGitHub(config);
   const ollama = new OllamaClient(config.ollamaUrl, config.model);
   const ref = repoRef();
   core.info('gitfox: scan-all mode — checking all open PRs and issues');
@@ -82,7 +92,7 @@ async function runPullRequest(config: GitfoxConfig): Promise<void> {
     return;
   }
 
-  const github = new GitHubClient(config.token);
+  const github = await resolveGitHub(config);
   const ollama = new OllamaClient(config.ollamaUrl, config.model);
   const ref = repoRef();
 
@@ -109,7 +119,7 @@ async function runIssue(config: GitfoxConfig): Promise<void> {
     return;
   }
 
-  const github = new GitHubClient(config.token);
+  const github = await resolveGitHub(config);
   const ollama = new OllamaClient(config.ollamaUrl, config.model);
   const ref = repoRef();
 

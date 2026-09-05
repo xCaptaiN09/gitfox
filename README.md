@@ -75,6 +75,8 @@ gitfox will scan all open PRs and issues and reply to any it has not already han
 | Input              | Default               | Description                                              |
 | ------------------ | --------------------- | -------------------------------------------------------- |
 | `github-token`     | `${{ github.token }}` | Token used to read PRs/issues and post comments          |
+| `app-id`           | _empty_               | GitHub App ID — when set with `private-key`, replies post as your app bot (e.g. `gitfox[bot]`) with its avatar |
+| `private-key`      | _empty_               | GitHub App private key (PEM). Store it as a secret, e.g. `private-key: ${{ secrets.GITFOX_APP_KEY }}` |
 | `model`            | `qwen2.5-coder:7b`    | Any Ollama model tag                                     |
 | `rules-path`       | `.gitfox/rules.md`    | Path to the team rules file (optional)                   |
 | `scan-all`         | `false`               | Scan all open PRs/issues (catch-up mode)                 |
@@ -103,6 +105,35 @@ Create `.gitfox/rules.md` in your repository:
 
 gitfox reads this file on every run and enforces it during review and triage.
 
+## Posting as a bot (`gitfox[bot]`)
+
+By default gitfox comments as the `github-actions` user. To have replies appear as
+**`gitfox[bot]`** — with its own name and avatar — create a GitHub App:
+
+1. GitHub → Settings → Developer settings → **GitHub Apps** → **New GitHub App**
+   - Name: `gitfox` (the `[bot]` suffix is added automatically)
+   - Homepage: `https://github.com/xCaptaiN09/gitfox`
+   - **Upload the avatar here** — this is where your `.github/assets/avatar.png` goes
+   - Uncheck webhook (not needed)
+   - Permissions: **Pull requests: Read & write**, **Issues: Read & write**, **Contents: Read-only**
+2. After creating, scroll down → **Generate a private key** (downloads a `.pem` file)
+3. **Install the app** on the repositories gitfox should work in (Install App → select repos)
+4. In each repo using gitfox, add two secrets:
+   - `GITFOX_APP_ID` — the **App ID** number shown on the app's settings page
+   - `GITFOX_APP_PRIVATE_KEY` — the full contents of the downloaded `.pem` file
+5. Use both inputs in the workflow:
+
+```yaml
+      - uses: xCaptaiN09/gitfox@v1
+        with:
+          app-id: ${{ secrets.GITFOX_APP_ID }}
+          private-key: ${{ secrets.GITFOX_APP_PRIVATE_KEY }}
+```
+
+When `app-id` + `private-key` are set, the `github-token` input is only used as a fallback
+and gitfox authenticates as the App installation — comments, reviews and reactions are then
+posted by `gitfox[bot]` with the app's avatar.
+
 ## Model choice
 
 The default model is `qwen2.5-coder:7b`, which balances review quality and runtime on GitHub's free runners. Use `qwen2.5-coder:0.5b` for faster, lighter runs, or larger models on bigger runners.
@@ -125,6 +156,7 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.3.0** | 2026-09-04 | GitHub App identity: pass `app-id` + `private-key` and every reply posts as your app bot (`gitfox[bot]`) with its avatar — token still works as before |
 | **v1.2.2** | 2026-09-04 | Action hardening verified in live end-to-end runs: sudo-free Ollama install into the runner temp dir, correct tarball URL (`.tar.zst`) with zstd extract + installer fallback, no workspace-scoped caches, Node 22, binary+model caching |
 | **v1.2.1** | 2026-09-04 | Model caching (Ollama binary + model persisted between runs — no more 4.7GB download every run), npm dependency cache, deterministic single Ollama server, 45-min job timeout guard, `qwen2.5-coder:7b` standardized everywhere |
 | **v1.2.0** | 2026-09-04 | `request-changes` mode blocks merges on critical findings, repo-context prompts (file tree + related source files), multi-line suggestions, 🚀/👍 progress reactions, incremental re-review of only new commits |

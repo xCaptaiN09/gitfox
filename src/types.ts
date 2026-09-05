@@ -52,6 +52,8 @@ export interface PriorFix {
 
 export interface GitfoxConfig {
   token: string;
+  appId: string;
+  privateKey: string;
   model: string;
   rulesPath: string;
   rulesContent: string;

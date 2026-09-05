@@ -29922,6 +29922,92 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
+/***/ 8075:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizePrivateKey = normalizePrivateKey;
+exports.createAppJwt = createAppJwt;
+exports.createAppToken = createAppToken;
+const node_crypto_1 = __nccwpck_require__(7598);
+const errors_1 = __nccwpck_require__(3916);
+function base64url(input) {
+    return Buffer.from(input).toString('base64url');
+}
+function normalizePrivateKey(key) {
+    const trimmed = key.trim();
+    if (trimmed.includes('\\n')) {
+        return trimmed.replace(/\\n/g, '\n');
+    }
+    return trimmed;
+}
+function createAppJwt(appId, privateKey, nowSeconds = Math.floor(Date.now() / 1000)) {
+    const normalizedKey = normalizePrivateKey(privateKey);
+    const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+    const payload = base64url(JSON.stringify({
+        iat: nowSeconds - 60,
+        exp: nowSeconds + 540,
+        iss: appId.trim()
+    }));
+    try {
+        const signer = (0, node_crypto_1.createSign)('RSA-SHA256');
+        signer.update(`${header}.${payload}`);
+        const signature = base64url(signer.sign(normalizedKey));
+        return `${header}.${payload}.${signature}`;
+    }
+    catch (error) {
+        throw new errors_1.GitfoxError('Failed to sign the GitHub App JWT — check that private-key contains the full PEM including BEGIN/END lines', { cause: error });
+    }
+}
+async function githubAppFetch(jwt, path) {
+    let response;
+    try {
+        response = await fetch(`https://api.github.com${path}`, {
+            headers: {
+                Authorization: `Bearer ${jwt}`,
+                Accept: 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+                'User-Agent': 'gitfox'
+            }
+        });
+    }
+    catch (error) {
+        throw new errors_1.GitfoxError(`Network error while authenticating the GitHub App at ${path}`, { cause: error });
+    }
+    const body = (await response.json().catch(() => ({})));
+    return { status: response.status, body };
+}
+async function createAppToken(appId, privateKey, ref) {
+    const jwt = createAppJwt(appId, privateKey);
+    const { status, body: installation } = await githubAppFetch(jwt, `/repos/${ref.owner}/${ref.repo}/installation`);
+    if (status === 404) {
+        throw new errors_1.GitfoxError(`No GitHub App installation found for ${ref.owner}/${ref.repo} — install the app on the repository first`);
+    }
+    if (status !== 200) {
+        const message = typeof installation.message === 'string' ? installation.message : `HTTP ${status}`;
+        throw new errors_1.GitfoxError(`GitHub App authentication failed at /repos/${ref.owner}/${ref.repo}/installation: ${message}`);
+    }
+    const installationId = installation.id;
+    if (typeof installationId !== 'number') {
+        throw new errors_1.GitfoxError(`No GitHub App installation found for ${ref.owner}/${ref.repo} — install the app on the repository first`);
+    }
+    const { status: tokenStatus, body: tokenBody } = await githubAppFetch(jwt, `/app/installations/${installationId}/access_tokens`);
+    if (tokenStatus !== 200 && tokenStatus !== 201) {
+        const message = typeof tokenBody.message === 'string' ? tokenBody.message : `HTTP ${tokenStatus}`;
+        throw new errors_1.GitfoxError(`GitHub App token exchange failed: ${message}`);
+    }
+    const token = tokenBody.token;
+    if (typeof token !== 'string' || token === '') {
+        throw new errors_1.GitfoxError('GitHub App token exchange returned no token');
+    }
+    return token;
+}
+
+
+/***/ }),
+
 /***/ 2973:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -29998,6 +30084,8 @@ function loadConfig() {
     const rulesPath = (process.env.GITFOX_RULES_PATH ?? '.gitfox/rules.md').trim();
     return {
         token: requireEnv('GITFOX_GITHUB_TOKEN'),
+        appId: (process.env.GITFOX_APP_ID ?? '').trim(),
+        privateKey: (process.env.GITFOX_APP_PRIVATE_KEY ?? '').trim(),
         model: requireEnv('GITFOX_MODEL'),
         rulesPath,
         rulesContent: loadRulesContent(rulesPath),
@@ -30620,6 +30708,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(7484));
 const github_1 = __nccwpck_require__(3228);
+const app_auth_1 = __nccwpck_require__(8075);
 const config_1 = __nccwpck_require__(2973);
 const errors_1 = __nccwpck_require__(3916);
 const github_client_1 = __nccwpck_require__(7890);
@@ -30629,6 +30718,14 @@ const scanner_1 = __nccwpck_require__(4105);
 const SUPPORTED_PR_ACTIONS = new Set(['opened', 'synchronize', 'reopened']);
 const SUPPORTED_ISSUE_ACTIONS = new Set(['opened']);
 const COMMENT_ACTION = 'created';
+async function resolveGitHub(config) {
+    if (config.appId !== '' && config.privateKey !== '') {
+        const installationToken = await (0, app_auth_1.createAppToken)(config.appId, config.privateKey, repoRef());
+        core.info('gitfox: authenticated as a GitHub App — replies will appear as gitfox[bot] with the app avatar');
+        return new github_client_1.GitHubClient(installationToken);
+    }
+    return new github_client_1.GitHubClient(config.token);
+}
 async function runCommentCommand(config) {
     const payload = github_1.context.payload;
     const comment = payload.comment;
@@ -30649,7 +30746,7 @@ async function runCommentCommand(config) {
         core.info('gitfox: comment does not mention gitfox, staying silent');
         return;
     }
-    const github = new github_client_1.GitHubClient(config.token);
+    const github = await resolveGitHub(config);
     const ollama = new ollama_client_1.OllamaClient(config.ollamaUrl, config.model);
     const ref = repoRef();
     if (issue.pull_request !== undefined) {
@@ -30672,7 +30769,7 @@ function repoRef() {
     return { owner: github_1.context.repo.owner, repo: github_1.context.repo.repo };
 }
 async function runScanAll(config) {
-    const github = new github_client_1.GitHubClient(config.token);
+    const github = await resolveGitHub(config);
     const ollama = new ollama_client_1.OllamaClient(config.ollamaUrl, config.model);
     const ref = repoRef();
     core.info('gitfox: scan-all mode — checking all open PRs and issues');
@@ -30690,7 +30787,7 @@ async function runPullRequest(config) {
         core.info(`gitfox: ignoring pull_request action "${String(github_1.context.payload.action)}"`);
         return;
     }
-    const github = new github_client_1.GitHubClient(config.token);
+    const github = await resolveGitHub(config);
     const ollama = new ollama_client_1.OllamaClient(config.ollamaUrl, config.model);
     const ref = repoRef();
     const headSha = typeof payload.head?.sha === 'string' ? payload.head.sha : undefined;
@@ -30713,7 +30810,7 @@ async function runIssue(config) {
         core.info(`gitfox: ignoring issues action "${String(github_1.context.payload.action)}"`);
         return;
     }
-    const github = new github_client_1.GitHubClient(config.token);
+    const github = await resolveGitHub(config);
     const ollama = new ollama_client_1.OllamaClient(config.ollamaUrl, config.model);
     const ref = repoRef();
     if (await github.alreadyRepliedToIssue(ref, payload.number)) {

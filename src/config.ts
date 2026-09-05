@@ -74,6 +74,8 @@ export function loadConfig(): GitfoxConfig {
 
   return {
     token: requireEnv('GITFOX_GITHUB_TOKEN'),
+    appId: (process.env.GITFOX_APP_ID ?? '').trim(),
+    privateKey: (process.env.GITFOX_APP_PRIVATE_KEY ?? '').trim(),
     model: requireEnv('GITFOX_MODEL'),
     rulesPath,
     rulesContent: loadRulesContent(rulesPath),
