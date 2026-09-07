@@ -5,11 +5,6 @@ export interface ChatMessage {
   content: string;
 }
 
-interface OllamaChatResponse {
-  message?: { content?: string };
-  error?: string;
-}
-
 export interface ChatOptions {
   json?: boolean;
   temperature?: number;
@@ -20,6 +15,30 @@ export interface ChatOptions {
 const DEFAULT_TIMEOUT_MS = 900000;
 const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_NUM_CTX = 16384;
+
+/**
+ * Folds one NDJSON stream line into the accumulated content/error state.
+ * Exported for tests; keeps `chat` lean.
+ */
+export function foldStreamLine(
+  state: { content: string; error: string },
+  line: string
+): { content: string; error: string } {
+  const trimmed = line.trim();
+  if (trimmed === '') {
+    return state;
+  }
+  try {
+    const chunk = JSON.parse(trimmed) as { message?: { content?: string }; error?: string };
+    return {
+      content: typeof chunk.message?.content === 'string' ? state.content + chunk.message.content : state.content,
+      error: typeof chunk.error === 'string' && chunk.error !== '' ? chunk.error : state.error
+    };
+  } catch {
+    // Ignore partial or malformed lines (e.g. keep-alive comments).
+    return state;
+  }
+}
 
 export class OllamaClient {
   private readonly baseUrl: string;
@@ -50,13 +69,17 @@ export class OllamaClient {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      // Stream NDJSON instead of `stream: false`: with a non-streaming request Ollama
+      // sends no response headers until generation finishes, and undici's hardcoded
+      // 300s headers timeout kills long reviews (~5 min on 4-core runners).
+      // With streaming, bytes flow continuously so the socket never times out.
       const response = await fetch(`${this.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: this.model,
           messages,
-          stream: false,
+          stream: true,
           ...(options.json === true ? { format: 'json' } : {}),
           options: {
             temperature: options.temperature ?? DEFAULT_TEMPERATURE,
@@ -70,16 +93,36 @@ export class OllamaClient {
         const bodyText = await response.text().catch(() => '');
         throw new OllamaError(`Ollama returned HTTP ${response.status}: ${bodyText.slice(0, 500)}`);
       }
-
-      const data = (await response.json()) as OllamaChatResponse;
-      if (typeof data.error === 'string' && data.error !== '') {
-        throw new OllamaError(`Ollama error: ${data.error}`);
+      if (response.body === null) {
+        throw new OllamaError('Ollama returned an empty response body');
       }
-      const content = data.message?.content;
-      if (typeof content !== 'string' || content.trim() === '') {
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let state = { content: '', error: '' };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIndex = buffer.indexOf('\n');
+        while (newlineIndex !== -1) {
+          state = foldStreamLine(state, buffer.slice(0, newlineIndex));
+          buffer = buffer.slice(newlineIndex + 1);
+          newlineIndex = buffer.indexOf('\n');
+        }
+      }
+      state = foldStreamLine(state, buffer);
+
+      if (state.error !== '') {
+        throw new OllamaError(`Ollama error: ${state.error}`);
+      }
+      if (state.content.trim() === '') {
         throw new OllamaError('Ollama returned an empty response');
       }
-      return content;
+      return state.content;
     } catch (error) {
       if (error instanceof OllamaError) {
         throw error;

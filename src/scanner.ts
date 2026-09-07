@@ -283,6 +283,24 @@ export async function reviewAndPost(
   pr: PullRequestContext,
   headSha?: string
 ): Promise<void> {
+  try {
+    await runReview(github, ollama, config, ref, pr, headSha);
+  } catch (error) {
+    if (config.progressReactions) {
+      await github.removeMyReaction(ref, pr.number, 'rocket');
+    }
+    throw error;
+  }
+}
+
+async function runReview(
+  github: GitHubClient,
+  ollama: OllamaClient,
+  config: GitfoxConfig,
+  ref: RepoRef,
+  pr: PullRequestContext,
+  headSha?: string
+): Promise<void> {
   if (config.progressReactions) {
     await github.addReaction(ref, pr.number, 'rocket').catch(() => undefined);
   }
@@ -402,6 +420,23 @@ export function renderInlineComment(finding: Finding, postSuggestions: boolean):
 }
 
 export async function triageAndPost(
+  github: GitHubClient,
+  ollama: OllamaClient,
+  config: GitfoxConfig,
+  ref: RepoRef,
+  issue: IssueContext
+): Promise<void> {
+  try {
+    await runTriage(github, ollama, config, ref, issue);
+  } catch (error) {
+    if (config.progressReactions) {
+      await github.removeMyReaction(ref, issue.number, 'rocket');
+    }
+    throw error;
+  }
+}
+
+async function runTriage(
   github: GitHubClient,
   ollama: OllamaClient,
   config: GitfoxConfig,

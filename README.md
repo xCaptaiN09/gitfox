@@ -158,6 +158,7 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.4.1** | 2026-09-07 | Reliability: Ollama calls now stream (NDJSON), eliminating undici's 5-minute header timeout that silently killed long reviews; failed reviews/triage clean up their 🚀 reaction instead of leaving a stuck "in progress" marker |
 | **v1.4.0** | 2026-09-05 | First-setup catch-up: new installs auto-scan all open PRs/issues one by one (also on any manual `workflow_dispatch`), repo context now powers issue triage too (README + file tree + related files) |
 | **v1.3.1** | 2026-09-05 | Marketplace-ready metadata: action name `gitfox-ai`, description under 125 chars (no code changes) |
 | **v1.3.0** | 2026-09-04 | GitHub App identity: pass `app-id` + `private-key` and every reply posts as your app bot (`gitfox[bot]`) with its avatar — token still works as before |

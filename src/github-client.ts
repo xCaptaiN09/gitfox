@@ -315,6 +315,33 @@ export class GitHubClient {
     }
   }
 
+  /**
+   * Best-effort cleanup: removes gitfox's own `rocket` reaction (e.g. when a
+   * review failed mid-run so users don't see a stuck "in progress" marker).
+   */
+  public async removeMyReaction(ref: RepoRef, number: number, content: 'rocket'): Promise<void> {
+    try {
+      const user = await this.octokit.rest.users.getAuthenticated();
+      const reactions = await this.octokit.paginate(this.octokit.rest.reactions.listForIssue, {
+        owner: ref.owner,
+        repo: ref.repo,
+        issue_number: number,
+        per_page: 100
+      });
+      const mine = reactions.find((reaction) => reaction.content === content && reaction.user?.login === user.data.login);
+      if (mine !== undefined) {
+        await this.octokit.rest.reactions.deleteForIssue({
+          owner: ref.owner,
+          repo: ref.repo,
+          issue_number: number,
+          reaction_id: mine.id
+        });
+      }
+    } catch {
+      // Cleanup must never break the run.
+    }
+  }
+
   public async compareDiff(ref: RepoRef, base: string, head: string, maxChars: number = 60000): Promise<string> {
     if (base === '' || head === '' || base === head) {
       return '';

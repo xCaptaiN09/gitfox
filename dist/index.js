@@ -30544,6 +30544,33 @@ class GitHubClient {
             throw this.wrap(error, `adding ${content} reaction on #${number}`);
         }
     }
+    /**
+     * Best-effort cleanup: removes gitfox's own `rocket` reaction (e.g. when a
+     * review failed mid-run so users don't see a stuck "in progress" marker).
+     */
+    async removeMyReaction(ref, number, content) {
+        try {
+            const user = await this.octokit.rest.users.getAuthenticated();
+            const reactions = await this.octokit.paginate(this.octokit.rest.reactions.listForIssue, {
+                owner: ref.owner,
+                repo: ref.repo,
+                issue_number: number,
+                per_page: 100
+            });
+            const mine = reactions.find((reaction) => reaction.content === content && reaction.user?.login === user.data.login);
+            if (mine !== undefined) {
+                await this.octokit.rest.reactions.deleteForIssue({
+                    owner: ref.owner,
+                    repo: ref.repo,
+                    issue_number: number,
+                    reaction_id: mine.id
+                });
+            }
+        }
+        catch {
+            // Cleanup must never break the run.
+        }
+    }
     async compareDiff(ref, base, head, maxChars = 60000) {
         if (base === '' || head === '' || base === head) {
             return '';
@@ -30979,10 +31006,32 @@ function isGitfoxMention(body) {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.OllamaClient = void 0;
+exports.foldStreamLine = foldStreamLine;
 const errors_1 = __nccwpck_require__(3916);
 const DEFAULT_TIMEOUT_MS = 900000;
 const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_NUM_CTX = 16384;
+/**
+ * Folds one NDJSON stream line into the accumulated content/error state.
+ * Exported for tests; keeps `chat` lean.
+ */
+function foldStreamLine(state, line) {
+    const trimmed = line.trim();
+    if (trimmed === '') {
+        return state;
+    }
+    try {
+        const chunk = JSON.parse(trimmed);
+        return {
+            content: typeof chunk.message?.content === 'string' ? state.content + chunk.message.content : state.content,
+            error: typeof chunk.error === 'string' && chunk.error !== '' ? chunk.error : state.error
+        };
+    }
+    catch {
+        // Ignore partial or malformed lines (e.g. keep-alive comments).
+        return state;
+    }
+}
 class OllamaClient {
     baseUrl;
     model;
@@ -31010,13 +31059,17 @@ class OllamaClient {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
         try {
+            // Stream NDJSON instead of `stream: false`: with a non-streaming request Ollama
+            // sends no response headers until generation finishes, and undici's hardcoded
+            // 300s headers timeout kills long reviews (~5 min on 4-core runners).
+            // With streaming, bytes flow continuously so the socket never times out.
             const response = await fetch(`${this.baseUrl}/api/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: this.model,
                     messages,
-                    stream: false,
+                    stream: true,
                     ...(options.json === true ? { format: 'json' } : {}),
                     options: {
                         temperature: options.temperature ?? DEFAULT_TEMPERATURE,
@@ -31029,15 +31082,34 @@ class OllamaClient {
                 const bodyText = await response.text().catch(() => '');
                 throw new errors_1.OllamaError(`Ollama returned HTTP ${response.status}: ${bodyText.slice(0, 500)}`);
             }
-            const data = (await response.json());
-            if (typeof data.error === 'string' && data.error !== '') {
-                throw new errors_1.OllamaError(`Ollama error: ${data.error}`);
+            if (response.body === null) {
+                throw new errors_1.OllamaError('Ollama returned an empty response body');
             }
-            const content = data.message?.content;
-            if (typeof content !== 'string' || content.trim() === '') {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let state = { content: '', error: '' };
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) {
+                    break;
+                }
+                buffer += decoder.decode(value, { stream: true });
+                let newlineIndex = buffer.indexOf('\n');
+                while (newlineIndex !== -1) {
+                    state = foldStreamLine(state, buffer.slice(0, newlineIndex));
+                    buffer = buffer.slice(newlineIndex + 1);
+                    newlineIndex = buffer.indexOf('\n');
+                }
+            }
+            state = foldStreamLine(state, buffer);
+            if (state.error !== '') {
+                throw new errors_1.OllamaError(`Ollama error: ${state.error}`);
+            }
+            if (state.content.trim() === '') {
                 throw new errors_1.OllamaError('Ollama returned an empty response');
             }
-            return content;
+            return state.content;
         }
         catch (error) {
             if (error instanceof errors_1.OllamaError) {
@@ -31532,6 +31604,17 @@ async function buildRepoContext(github, ref, pr, headSha) {
     return sections.join('\n\n');
 }
 async function reviewAndPost(github, ollama, config, ref, pr, headSha) {
+    try {
+        await runReview(github, ollama, config, ref, pr, headSha);
+    }
+    catch (error) {
+        if (config.progressReactions) {
+            await github.removeMyReaction(ref, pr.number, 'rocket');
+        }
+        throw error;
+    }
+}
+async function runReview(github, ollama, config, ref, pr, headSha) {
     if (config.progressReactions) {
         await github.addReaction(ref, pr.number, 'rocket').catch(() => undefined);
     }
@@ -31619,6 +31702,17 @@ function renderInlineComment(finding, postSuggestions) {
     return parts.join('\n\n');
 }
 async function triageAndPost(github, ollama, config, ref, issue) {
+    try {
+        await runTriage(github, ollama, config, ref, issue);
+    }
+    catch (error) {
+        if (config.progressReactions) {
+            await github.removeMyReaction(ref, issue.number, 'rocket');
+        }
+        throw error;
+    }
+}
+async function runTriage(github, ollama, config, ref, issue) {
     if (config.progressReactions) {
         await github.addReaction(ref, issue.number, 'rocket').catch(() => undefined);
     }
