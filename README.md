@@ -4,7 +4,7 @@
 
 # 🦊 Gitfox
 
-![Release](https://img.shields.io/github/v/release/xCaptaiN09/gitfox) ![License](https://img.shields.io/github/license/xCaptaiN09/gitfox) ![Tests](https://img.shields.io/badge/tests-35%2F35-brightgreen)
+[![Release](https://img.shields.io/github/v/release/xCaptaiN09/gitfox)](https://github.com/xCaptaiN09/gitfox/releases) ![License](https://img.shields.io/github/license/xCaptaiN09/gitfox) ![Tests](https://img.shields.io/badge/tests-45%2F45-brightgreen) [![GitHub Marketplace](https://img.shields.io/badge/GitHub_Marketplace-gitfox--ai-orange)](https://github.com/marketplace/actions/gitfox-ai)
 
 **Private AI code review & issue triage for GitHub — powered by a local Ollama model.**
 
@@ -39,6 +39,11 @@ on:
   issue_comment:
     types: [created]
   workflow_dispatch:
+    inputs:
+      scan_all:
+        description: 'Catch-up: scan all open PRs and issues'
+        type: boolean
+        default: false
 
 jobs:
   gitfox:
@@ -69,8 +74,9 @@ Comment `/gitfox` or `@gitfox` on any PR or issue and gitfox will re-run its rev
 
 Nothing to do — on its **first run in a repo** (no gitfox replies yet), gitfox automatically
 catches up: it reviews every currently open PR and triages every open issue, one by one
-(safety-capped by `max-scan-items`). You can also trigger this any time via a manual
-`workflow_dispatch` of the gitfox workflow.
+(safety-capped by `max-scan-items`). You can also trigger this any time: **Actions → gitfox →
+Run workflow** — any manual dispatch runs the full catch-up sweep (the `scan_all` toggle is
+accepted for clarity; a bare `workflow_dispatch:` behaves the same).
 
 ## Inputs
 
