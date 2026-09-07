@@ -148,6 +148,10 @@ export async function scanRepository(
     try {
       if (await github.alreadyRepliedToPr(ref, number)) {
         stats.prsSkipped += 1;
+        if (config.progressReactions) {
+          // Sweep stale 🚀 left over from interrupted runs of older versions.
+          await github.removeMyReaction(ref, number, 'rocket').catch(() => undefined);
+        }
         continue;
       }
       const pr = await github.getPullRequest(ref, number);
@@ -167,6 +171,10 @@ export async function scanRepository(
     try {
       if (await github.alreadyRepliedToIssue(ref, number)) {
         stats.issuesSkipped += 1;
+        if (config.progressReactions) {
+          // Sweep stale 🚀 left over from interrupted runs of older versions.
+          await github.removeMyReaction(ref, number, 'rocket').catch(() => undefined);
+        }
         continue;
       }
       const issue = await github.getIssue(ref, number);

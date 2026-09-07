@@ -315,26 +315,33 @@ export class GitHubClient {
     }
   }
 
+  private authLoginCache: string | undefined;
+
   /**
-   * Best-effort cleanup: removes gitfox's own `rocket` reaction (e.g. when a
+   * Best-effort cleanup: removes gitfox's own `rocket` reactions (e.g. when a
    * review failed mid-run so users don't see a stuck "in progress" marker).
+   * Deletes ALL matching reactions, so orphaned rockets from older versions
+   * or double-posted rockets are cleaned in one call.
    */
   public async removeMyReaction(ref: RepoRef, number: number, content: 'rocket'): Promise<void> {
     try {
-      const user = await this.octokit.rest.users.getAuthenticated();
+      if (this.authLoginCache === undefined) {
+        const user = await this.octokit.rest.users.getAuthenticated();
+        this.authLoginCache = user.data.login;
+      }
       const reactions = await this.octokit.paginate(this.octokit.rest.reactions.listForIssue, {
         owner: ref.owner,
         repo: ref.repo,
         issue_number: number,
         per_page: 100
       });
-      const mine = reactions.find((reaction) => reaction.content === content && reaction.user?.login === user.data.login);
-      if (mine !== undefined) {
+      const mine = reactions.filter((reaction) => reaction.content === content && reaction.user?.login === this.authLoginCache);
+      for (const reaction of mine) {
         await this.octokit.rest.reactions.deleteForIssue({
           owner: ref.owner,
           repo: ref.repo,
           issue_number: number,
-          reaction_id: mine.id
+          reaction_id: reaction.id
         });
       }
     } catch {
