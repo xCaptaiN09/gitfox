@@ -31675,7 +31675,9 @@ async function runReview(github, ollama, config, ref, pr, headSha) {
             await github.createComment(ref, pr.number, body);
         }
     }
-    if (config.progressReactions) {
+    if (posted && config.progressReactions) {
+        // Clear the transient "working" marker; the 👍 alone signals completion.
+        await github.removeMyReaction(ref, pr.number, 'rocket').catch(() => undefined);
         await github.addReaction(ref, pr.number, '+1').catch(() => undefined);
     }
 }
@@ -31743,6 +31745,8 @@ async function runTriage(github, ollama, config, ref, issue) {
         await github.addLabels(ref, issue.number, result.labels);
     }
     if (config.progressReactions) {
+        // Clear the transient "working" marker; the 👍 alone signals completion.
+        await github.removeMyReaction(ref, issue.number, 'rocket').catch(() => undefined);
         await github.addReaction(ref, issue.number, '+1').catch(() => undefined);
     }
 }

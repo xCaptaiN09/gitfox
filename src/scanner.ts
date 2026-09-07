@@ -390,7 +390,9 @@ async function runReview(
     }
   }
 
-  if (config.progressReactions) {
+  if (posted && config.progressReactions) {
+    // Clear the transient "working" marker; the 👍 alone signals completion.
+    await github.removeMyReaction(ref, pr.number, 'rocket').catch(() => undefined);
     await github.addReaction(ref, pr.number, '+1').catch(() => undefined);
   }
 }
@@ -477,6 +479,8 @@ async function runTriage(
   }
 
   if (config.progressReactions) {
+    // Clear the transient "working" marker; the 👍 alone signals completion.
+    await github.removeMyReaction(ref, issue.number, 'rocket').catch(() => undefined);
     await github.addReaction(ref, issue.number, '+1').catch(() => undefined);
   }
 }
