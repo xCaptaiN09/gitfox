@@ -158,6 +158,7 @@ No code is sent to OpenAI, Anthropic, or any other cloud service.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v1.4.3** | 2026-09-07 | Reaction cleanup completed: removes ALL orphan 🚀 per item (older versions left ghosts), dedup-skipped items in catch-up sweeps get stale rockets cleared too |
 | **v1.4.2** | 2026-09-07 | Reaction lifecycle: 🚀 is now transient — cleared on both success (only 👍 remains) and failure, so no more stale "in progress" markers; includes v1.4.1's NDJSON streaming fix for the 5-minute review timeout |
 | **v1.4.1** | 2026-09-07 | Reliability: Ollama calls now stream (NDJSON), eliminating undici's 5-minute header timeout that silently killed long reviews; failed reviews/triage clean up their 🚀 reaction instead of leaving a stuck "in progress" marker |
 | **v1.4.0** | 2026-09-05 | First-setup catch-up: new installs auto-scan all open PRs/issues one by one (also on any manual `workflow_dispatch`), repo context now powers issue triage too (README + file tree + related files) |
